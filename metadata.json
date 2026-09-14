@@ -1,0 +1,6 @@
+{
+  "name": "NoteStorage",
+  "description": "Clean, modern note-taking and drawing application with subjects, topics, rich text editing, PDF document annotation, and handwriting canvas.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

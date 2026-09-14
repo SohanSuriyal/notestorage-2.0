@@ -1,0 +1,671 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NoteStorage</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #FAFAFA;
+      --card: #FFFFFF;
+      --text: #111827;
+      --muted: #6B7280;
+      --line: #EAECF0;
+      --accent: #7F56D9;
+      --accent-dark: #6941C6;
+      --accent-light: #F9F5FF;
+      --accent-pill: #F4EBFF;
+      --accent-border: #D6BBFB;
+      --border-btn: #D0D5DD;
+    }
+    [data-theme="dark"] {
+      --bg: #121214;
+      --card: #18181B;
+      --text: #F4F4F5;
+      --muted: #A1A1AA;
+      --line: #27272A;
+      --accent: #9B72F7;
+      --accent-dark: #B692F6;
+      --accent-light: #2E1A47;
+      --accent-pill: #281B3E;
+      --accent-border: #6941C6;
+      --border-btn: #3F3F46;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+    }
+    button, input, select { font: inherit; outline: none; }
+    button { cursor: pointer; }
+
+    /* Left Sidebar */
+    .sidebar {
+      width: 230px;
+      background: var(--card);
+      border-right: 1px solid var(--line);
+      padding: 20px 14px;
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      transition: width 0.2s ease;
+      user-select: none;
+    }
+    .sidebar.collapsed {
+      width: 70px;
+      padding: 20px 8px;
+    }
+    .brand-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 28px;
+      padding: 0 4px;
+    }
+    .brand {
+      font-size: 21px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+    .brand span { color: var(--accent); }
+    .collapse-btn {
+      width: 28px;
+      height: 28px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: transparent;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+    }
+    .collapse-btn:hover { background: var(--bg); }
+    .nav {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .nav-btn {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 9px 12px;
+      border: 0;
+      border-radius: 12px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 500;
+      text-align: left;
+      transition: 0.15s;
+    }
+    .nav-btn:hover { background: var(--bg); color: var(--text); }
+    .nav-btn.active {
+      background: var(--accent-light);
+      color: var(--accent-dark);
+      font-weight: 600;
+    }
+    .bottom-nav {
+      margin-top: auto;
+      padding-top: 14px;
+      border-top: 1px solid var(--line);
+    }
+
+    /* Main Area */
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+      padding: 20px 32px;
+      min-width: 0;
+    }
+
+    /* Top Notes Header */
+    .notes-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      user-select: none;
+      margin-bottom: 14px;
+    }
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .back-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border-btn);
+      background: var(--card);
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 500;
+    }
+    .note-title {
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      margin: 0;
+      border: 0;
+      background: transparent;
+      color: var(--text);
+    }
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .saved-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 14px;
+      color: #027A48;
+      font-weight: 500;
+      margin-right: 6px;
+    }
+    .btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border-btn);
+      background: var(--card);
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 500;
+    }
+    .btn:hover { background: var(--bg); }
+    .btn-delete {
+      border-color: #FDA29B;
+      color: #D92D20;
+    }
+    .btn-delete:hover { background: #FEF3F2; }
+
+    /* Subject & Topic Selector */
+    .selectors-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 14px;
+      user-select: none;
+    }
+    .field-group label {
+      display: block;
+      font-size: 14px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .select-box {
+      width: 100%;
+      height: 42px;
+      padding: 0 14px;
+      border: 1px solid var(--border-btn);
+      border-radius: 12px;
+      background: var(--card);
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* Toolbars */
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      padding: 6px 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--card);
+      margin-bottom: 10px;
+      user-select: none;
+    }
+    .tb-btn {
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 0;
+      background: transparent;
+      color: var(--text);
+      font-size: 14px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .tb-btn:hover { background: var(--bg); }
+    .tb-btn.active-pen {
+      background: var(--accent-pill);
+      border: 1px solid var(--accent-border);
+      color: var(--accent-dark);
+      font-weight: 600;
+      border-radius: 8px;
+    }
+    .tb-divider {
+      width: 1px;
+      height: 20px;
+      background: var(--line);
+      margin: 0 4px;
+    }
+    .thickness-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      color: var(--text);
+    }
+    .thickness-wrap input[type="range"] {
+      accent-color: var(--accent);
+      width: 90px;
+    }
+    .color-circle {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #111;
+      display: inline-block;
+      vertical-align: middle;
+      border: 1px solid rgba(0,0,0,0.1);
+    }
+
+    /* Canvas / Writing Area */
+    .canvas-container {
+      flex: 1;
+      position: relative;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+    .editor-body {
+      min-height: 800px;
+      padding: 32px;
+      outline: none;
+      line-height: 1.7;
+      font-size: 16px;
+    }
+    .drawing-canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+    }
+  </style>
+</head>
+<body>
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="brand-row">
+      <div class="brand">Note<span>Storage</span></div>
+      <button class="collapse-btn" onclick="toggleSidebar()">«</button>
+    </div>
+    <nav class="nav">
+      <button class="nav-btn" onclick="alert('Navigating to Dashboard')">⌂ &nbsp; Dashboard</button>
+      <button class="nav-btn" onclick="alert('Navigating to Subjects')">▦ &nbsp; Subjects</button>
+      <button class="nav-btn active">✎ &nbsp; Notes</button>
+      <button class="nav-btn" onclick="alert('Navigating to Recent')">◷ &nbsp; Recent</button>
+      <button class="nav-btn" onclick="alert('Navigating to Favorites')">☆ &nbsp; Favorites</button>
+      <button class="nav-btn" onclick="alert('Navigating to Settings')">⚙ &nbsp; Settings</button>
+    </nav>
+    <div class="bottom-nav">
+      <button class="nav-btn" onclick="toggleDarkMode()">☾ &nbsp; Dark mode</button>
+    </div>
+  </aside>
+
+  <!-- Main Canvas Content -->
+  <main class="main">
+    <!-- Header -->
+    <div class="notes-header">
+      <div class="header-left">
+        <button class="back-btn" onclick="window.history.back()">‹ Notes</button>
+        <input class="note-title" id="noteTitle" value="lets go" oninput="saveNoteTitle(this.value)">
+      </div>
+      <div class="header-right">
+        <div class="saved-badge">● Saved</div>
+        <button class="btn" onclick="renameNote()">✏ Rename</button>
+        <button class="btn" onclick="exportNote()">↑ Export</button>
+        <button class="btn btn-delete" onclick="deleteNote()">🗑 Delete</button>
+      </div>
+    </div>
+
+    <!-- Subject & Topic Selectors -->
+    <div class="selectors-grid">
+      <div class="field-group">
+        <label>Subject</label>
+        <div class="select-box" id="subjectBox">
+          <span>dbms</span>
+          <span style="color:var(--muted)">▾</span>
+        </div>
+      </div>
+      <div class="field-group">
+        <label>Topic</label>
+        <div class="select-box" id="topicBox">
+          <span>Week 6</span>
+          <span style="color:var(--muted)">▾</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Formatting Toolbar -->
+    <div class="toolbar">
+      <button class="tb-btn" style="font-weight:700" onclick="execCmd('bold')">B</button>
+      <button class="tb-btn" style="font-style:italic" onclick="execCmd('italic')">I</button>
+      <button class="tb-btn" style="text-decoration:underline" onclick="execCmd('underline')">U</button>
+      <button class="tb-btn" style="font-weight:600" onclick="execCmd('formatBlock','H1')">H1</button>
+      <button class="tb-btn" style="font-weight:600" onclick="execCmd('formatBlock','H2')">H2</button>
+      <button class="tb-btn" onclick="execCmd('formatBlock','P')">¶ ▾</button>
+      <div class="tb-divider"></div>
+      <!-- Bullet list with indexing dropdown -->
+      <div style="position:relative;display:inline-flex;align-items:center;">
+        <button class="tb-btn" onclick="execCmd('insertUnorderedList')" title="Bullet List">≡</button>
+        <button class="tb-btn" style="padding:6px 4px;margin-left:-4px;" onclick="toggleMenu('bulletMenu', event)" title="Bullet Styles">▾</button>
+        <div id="bulletMenu" style="display:none;position:absolute;left:0;top:36px;z-index:50;width:240px;background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 25px rgba(0,0,0,0.1);padding:8px;">
+          <div style="font-size:11px;font-weight:700;color:var(--muted);padding:4px 8px;text-transform:uppercase;">Bullet Indexing Styles</div>
+          <button class="tb-btn" style="width:100%;justify-content:flex-start;padding:6px 8px;border-radius:6px;" onclick="applyCustomList('insertUnorderedList', 'disc')"><span style="font-weight:bold;margin-right:8px;">•</span> Solid Disc</button>
+          <button class="tb-btn" style="width:100%;justify-content:flex-start;padding:6px 8px;border-radius:6px;" onclick="applyCustomList('insertUnorderedList', 'circle')"><span style="font-weight:bold;margin-right:8px;">◦</span> Circle Ring</button>
+          <button class="tb-btn" style="width:100%;justify-content:flex-start;padding:6px 8px;border-radius:6px;" onclick="applyCustomList('insertUnorderedList', 'square')"><span style="font-weight:bold;margin-right:8px;">▪</span> Square</button>
+          <button class="tb-btn" style="width:100%;justify-content:flex-start;padding:6px 8px;border-radius:6px;" onclick="applyCustomList('insertUnorderedList', '\'◆  \'')"><span style="font-weight:bold;margin-right:8px;">◆</span> Diamond</button>
+          <button class="tb-btn" style="width:100%;justify-content:flex-start;padding:6px 8px;border-radius:6px;" onclick="applyCustomList('insertUnorderedList', '\'➢  \'')"><span style="font-weight:bold;margin-right:8px;">➢</span> Arrow</button>
+          <button class="tb-btn" style="width:100%;justify-content:flex-start;padding:6px 8px;border-radius:6px;" onclick="applyCustomList('insertUnorderedList', '\'–  \'')"><span style="font-weight:bold;margin-right:8px;">–</span> Dash</button>
+          <button class="tb-btn" style="width:100%;justify-content:flex-start;padding:6px 8px;border-radius:6px;" onclick="applyCustomList('insertUnorderedList', '\'★  \'')"><span style="font-weight:bold;margin-right:8px;">★</span> Star</button>
+          <button class="tb-btn" style="width:100%;justify-content:flex-start;padding:6px 8px;border-radius:6px;" onclick="applyCustomList('insertUnorderedList', '\'✓  \'')"><span style="font-weight:bold;margin-right:8px;">✓</span> Check</button>
+        </div>
+      </div>
+
+      <!-- Numbered list with indexing options dropdown -->
+      <div style="position:relative;display:inline-flex;align-items:center;">
+        <button class="tb-btn" onclick="execCmd('insertOrderedList')" title="Numbered List">1 2 3</button>
+        <button class="tb-btn" style="padding:6px 4px;margin-left:-4px;" onclick="toggleMenu('numberMenu', event)" title="Numbered Indexing Options">▾</button>
+        <div id="numberMenu" style="display:none;position:absolute;left:0;top:36px;z-index:50;width:250px;background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 25px rgba(0,0,0,0.1);padding:8px;">
+          <div style="font-size:11px;font-weight:700;color:var(--muted);padding:4px 8px;text-transform:uppercase;">Numbered Indexing Options</div>
+          <button class="tb-btn" style="width:100%;justify-content:flex-start;padding:6px 8px;border-radius:6px;" onclick="applyCustomList('insertOrderedList', 'decimal')"><span style="font-weight:bold;margin-right:8px;">1.</span> Numbers (1, 2, 3)</button>
+          <button class="tb-btn" style="width:100%;justify-content:flex-start;padding:6px 8px;border-radius:6px;" onclick="applyCustomList('insertOrderedList', 'lower-alpha')"><span style="font-weight:bold;margin-right:8px;">a.</span> Lowercase (a, b, c)</button>
+          <button class="tb-btn" style="width:100%;justify-content:flex-start;padding:6px 8px;border-radius:6px;" onclick="applyCustomList('insertOrderedList', 'upper-alpha')"><span style="font-weight:bold;margin-right:8px;">A.</span> Uppercase (A, B, C)</button>
+          <button class="tb-btn" style="width:100%;justify-content:flex-start;padding:6px 8px;border-radius:6px;" onclick="applyCustomList('insertOrderedList', 'lower-roman')"><span style="font-weight:bold;margin-right:8px;">i.</span> Roman (i, ii, iii)</button>
+          <button class="tb-btn" style="width:100%;justify-content:flex-start;padding:6px 8px;border-radius:6px;" onclick="applyCustomList('insertOrderedList', 'upper-roman')"><span style="font-weight:bold;margin-right:8px;">I.</span> Upper Roman (I, II, III)</button>
+          <button class="tb-btn" style="width:100%;justify-content:flex-start;padding:6px 8px;border-radius:6px;" onclick="applyCustomList('insertOrderedList', 'decimal-leading-zero')"><span style="font-weight:bold;margin-right:8px;">01.</span> Leading Zero (01, 02)</button>
+          <button class="tb-btn" style="width:100%;justify-content:flex-start;padding:6px 8px;border-radius:6px;" onclick="applyCustomList('insertOrderedList', 'lower-greek')"><span style="font-weight:bold;margin-right:8px;">α.</span> Greek (α, β, γ)</button>
+        </div>
+      </div>
+      <div class="tb-divider"></div>
+      <button class="tb-btn" onclick="insertCheck()"><span style="color:#7F56D9">☑</span> Checklist</button>
+      <button class="tb-btn" onclick="document.getElementById('imgUpload').click()">🖼 Image</button>
+      <input type="file" id="imgUpload" accept="image/*" style="display:none" onchange="uploadImage(event)">
+      <button class="tb-btn" onclick="pasteImage()">📋 Paste image</button>
+      <button class="tb-btn" style="color:#7F56D9;font-weight:600">✏ Drawing</button>
+      <button class="tb-btn">⋯</button>
+    </div>
+
+    <!-- Drawing Toolbar -->
+    <div class="toolbar" id="drawToolbar">
+      <button class="tb-btn active-pen" id="penBtn" onclick="setTool('pen')">✒ Pen</button>
+      <button class="tb-btn" id="highlighterBtn" onclick="setTool('highlighter')">🖍 Highlighter</button>
+      <button class="tb-btn" id="eraserBtn" onclick="setTool('eraser')">⌫ Eraser ▾</button>
+      <div class="tb-divider"></div>
+      <div class="thickness-wrap">
+        <span>Thickness</span>
+        <input type="range" min="1" max="30" value="4" oninput="setThickness(this.value)">
+        <span id="thickVal">4 px ▾</span>
+      </div>
+      <div class="tb-divider"></div>
+      <button class="tb-btn" onclick="pickColor()"><span class="color-circle" id="colorCircle"></span> ▾</button>
+      <input type="color" id="hiddenColor" value="#111111" style="display:none" onchange="changeColor(this.value)">
+      <div class="tb-divider"></div>
+      <button class="tb-btn" onclick="undoDraw()">↶ Undo</button>
+      <button class="tb-btn" onclick="redoDraw()">↷ Redo</button>
+      <button class="tb-btn" onclick="clearDraw()">🗑 Clear</button>
+      <div class="tb-divider"></div>
+      <button class="btn" style="padding:4px 10px" onclick="doneDraw()">✓ Done drawing</button>
+    </div>
+
+    <!-- Note Canvas -->
+    <div class="canvas-container" id="canvasContainer">
+      <div class="editor-body" id="editorBody" contenteditable="true" spellcheck="false">
+        <p><br></p>
+      </div>
+      <canvas class="drawing-canvas" id="canvas"></canvas>
+    </div>
+  </main>
+
+  <script>
+    let tool = 'pen', color = '#111111', size = 4;
+    let strokes = [], undoStack = [], redoStack = [];
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    let isDrawing = false;
+    let currentPoints = [];
+
+    function resizeCanvas() {
+      const container = document.getElementById('canvasContainer');
+      canvas.width = container.clientWidth;
+      canvas.height = Math.max(container.scrollHeight, 1200);
+      redraw();
+    }
+    window.addEventListener('resize', resizeCanvas);
+    setTimeout(resizeCanvas, 50);
+
+    function redraw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (const s of strokes) {
+        if (!s.points || s.points.length === 0) continue;
+        ctx.save();
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        if (s.tool === 'highlighter') {
+          ctx.strokeStyle = s.color;
+          ctx.globalAlpha = 0.3;
+          ctx.lineWidth = Math.max(s.size * 3, 14);
+        } else {
+          ctx.strokeStyle = s.color;
+          ctx.globalAlpha = 1.0;
+          ctx.lineWidth = s.size;
+        }
+        ctx.beginPath();
+        ctx.moveTo(s.points[0].x, s.points[0].y);
+        for (let i = 1; i < s.points.length; i++) {
+          ctx.lineTo(s.points[i].x, s.points[i].y);
+        }
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    canvas.addEventListener('pointerdown', e => {
+      const r = canvas.getBoundingClientRect();
+      const x = e.clientX - r.left, y = e.clientY - r.top;
+      isDrawing = true;
+      currentPoints = [{ x, y }];
+    });
+
+    canvas.addEventListener('pointermove', e => {
+      if (!isDrawing) return;
+      const r = canvas.getBoundingClientRect();
+      const x = e.clientX - r.left, y = e.clientY - r.top;
+      currentPoints.push({ x, y });
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      if (tool === 'highlighter') {
+        ctx.strokeStyle = color;
+        ctx.globalAlpha = 0.3;
+        ctx.lineWidth = Math.max(size * 3, 14);
+      } else if (tool === 'eraser') {
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = size * 3;
+      } else {
+        ctx.strokeStyle = color;
+        ctx.globalAlpha = 1.0;
+        ctx.lineWidth = size;
+      }
+      ctx.beginPath();
+      const prev = currentPoints[currentPoints.length - 2];
+      ctx.moveTo(prev.x, prev.y);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+      ctx.restore();
+    });
+
+    canvas.addEventListener('pointerup', () => {
+      if (!isDrawing) return;
+      isDrawing = false;
+      if (currentPoints.length > 1) {
+        undoStack.push([...strokes]);
+        strokes.push({ tool, color, size, points: currentPoints });
+      }
+    });
+
+    function setTool(t) {
+      tool = t;
+      document.getElementById('penBtn').className = 'tb-btn' + (t==='pen'?' active-pen':'');
+      document.getElementById('highlighterBtn').className = 'tb-btn' + (t==='highlighter'?' active-pen':'');
+      document.getElementById('eraserBtn').className = 'tb-btn' + (t==='eraser'?' active-pen':'');
+    }
+
+    function setThickness(val) {
+      size = Number(val);
+      document.getElementById('thickVal').textContent = val + ' px ▾';
+    }
+
+    function pickColor() { document.getElementById('hiddenColor').click(); }
+    function changeColor(c) {
+      color = c;
+      document.getElementById('colorCircle').style.backgroundColor = c;
+    }
+
+    function undoDraw() {
+      if (!undoStack.length) return;
+      redoStack.push([...strokes]);
+      strokes = undoStack.pop();
+      redraw();
+    }
+
+    function redoDraw() {
+      if (!redoStack.length) return;
+      undoStack.push([...strokes]);
+      strokes = redoStack.pop();
+      redraw();
+    }
+
+    function clearDraw() {
+      if (!confirm('Clear canvas?')) return;
+      undoStack.push([...strokes]);
+      strokes = [];
+      redraw();
+    }
+
+    function doneDraw() {
+      alert('Drawing mode completed. Click anywhere to continue writing text.');
+    }
+
+    function toggleMenu(id, e) {
+      if (e) e.stopPropagation();
+      const m = document.getElementById(id);
+      const isVisible = m.style.display === 'block';
+      document.getElementById('bulletMenu').style.display = 'none';
+      document.getElementById('numberMenu').style.display = 'none';
+      m.style.display = isVisible ? 'none' : 'block';
+    }
+
+    document.addEventListener('click', () => {
+      const bm = document.getElementById('bulletMenu');
+      const nm = document.getElementById('numberMenu');
+      if (bm) bm.style.display = 'none';
+      if (nm) nm.style.display = 'none';
+    });
+
+    function applyCustomList(cmd, styleType) {
+      document.getElementById('editorBody').focus();
+      const sel = window.getSelection();
+      let activeList = null;
+      if (sel && sel.anchorNode) {
+        let curr = sel.anchorNode;
+        while (curr && curr !== document.getElementById('editorBody')) {
+          if (curr.nodeName === 'OL' || curr.nodeName === 'UL') {
+            activeList = curr;
+            break;
+          }
+          curr = curr.parentNode;
+        }
+      }
+
+      const targetTag = cmd === 'insertOrderedList' ? 'OL' : 'UL';
+      if (activeList && activeList.tagName === targetTag) {
+        activeList.style.listStyleType = styleType;
+      } else {
+        document.execCommand(cmd, false);
+        const updatedSel = window.getSelection();
+        if (updatedSel && updatedSel.anchorNode) {
+          let node = updatedSel.anchorNode;
+          while (node && node !== document.getElementById('editorBody')) {
+            if (node.nodeName === 'OL' || node.nodeName === 'UL') {
+              node.style.listStyleType = styleType;
+              break;
+            }
+            node = node.parentNode;
+          }
+        }
+      }
+
+      document.getElementById('bulletMenu').style.display = 'none';
+      document.getElementById('numberMenu').style.display = 'none';
+    }
+
+    function execCmd(cmd, val = null) {
+      document.getElementById('editorBody').focus();
+      document.execCommand(cmd, false, val);
+    }
+
+    function insertCheck() {
+      execCmd('insertHTML', '<div style="display:flex;align-items:center;gap:8px;margin:6px 0;"><input type="checkbox"><span>Checklist item</span></div><p><br></p>');
+    }
+
+    function toggleDarkMode() {
+      const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+      document.documentElement.setAttribute('data-theme', isDark ? 'light' : 'dark');
+    }
+
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('collapsed');
+    }
+
+    function renameNote() {
+      const t = prompt('Rename note:', document.getElementById('noteTitle').value);
+      if (t) document.getElementById('noteTitle').value = t;
+    }
+
+    function deleteNote() {
+      if (confirm('Delete this note?')) {
+        document.getElementById('noteTitle').value = 'Untitled note';
+        document.getElementById('editorBody').innerHTML = '<p><br></p>';
+        strokes = [];
+        redraw();
+      }
+    }
+
+    function exportNote() {
+      window.print();
+    }
+  </script>
+</body>
+</html>
