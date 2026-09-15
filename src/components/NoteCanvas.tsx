@@ -1,26 +1,162 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import {
   DrawingStroke,
   DrawingTool,
   EraserType,
   DrawingPoint,
   PdfDocumentData,
+  NoteTextBox,
+  PaperStyle,
 } from '../types';
 import {
   FileText,
   Upload,
-  Sparkles,
   ZoomIn,
   ZoomOut,
   Trash2,
   PenTool,
-  Check,
+  GripHorizontal,
+  X,
+  AlertCircle,
+  Plus,
 } from 'lucide-react';
-import { renderPdfPages, createSamplePdfData } from '../utils/pdfLoader';
+import { renderPdfPages } from '../utils/pdfLoader';
+
+interface OneNoteTextBoxViewProps {
+  box: NoteTextBox;
+  isActive: boolean;
+  isDragging: boolean;
+  isResizing: boolean;
+  isDrawingMode: boolean;
+  darkMode: boolean;
+  onSelect: () => void;
+  onStartDrag: (e: React.MouseEvent) => void;
+  onStartResize: (e: React.MouseEvent) => void;
+  onDelete: () => void;
+  onChangeContent: (newContent: string) => void;
+  onClickContainer: (e: React.MouseEvent) => void;
+}
+
+const OneNoteTextBoxView: React.FC<OneNoteTextBoxViewProps> = ({
+  box,
+  isActive,
+  isDragging,
+  isResizing,
+  isDrawingMode,
+  darkMode,
+  onSelect,
+  onStartDrag,
+  onStartResize,
+  onDelete,
+  onChangeContent,
+  onClickContainer,
+}) => {
+  const editorRef = useRef<HTMLDivElement>(null);
+  const isInitialMount = useRef(true);
+
+  // Initialize and synchronize innerHTML when box.content updates externally without destroying caret on typing
+  useEffect(() => {
+    const el = editorRef.current;
+    if (!el) return;
+
+    if (isInitialMount.current) {
+      el.innerHTML = box.content;
+      isInitialMount.current = false;
+      return;
+    }
+
+    // Only update innerHTML if it's NOT the active element and content actually differs
+    if (document.activeElement !== el && el.innerHTML !== box.content) {
+      el.innerHTML = box.content;
+    }
+  }, [box.content]);
+
+  return (
+    <div
+      id={`box_container_${box.id}`}
+      className={`onenote-box-container pointer-events-auto group absolute transition-shadow rounded-xl ${
+        isDragging ? 'opacity-85 shadow-xl cursor-grabbing' : ''
+      } ${
+        isActive
+          ? 'ring-1 ring-purple-500/40 bg-white/50 dark:bg-zinc-900/50 shadow-xs'
+          : 'hover:ring-1 hover:ring-gray-300 dark:hover:ring-zinc-700'
+      }`}
+      style={{
+        left: `${box.x}px`,
+        top: `${box.y}px`,
+        width: `${box.width}px`,
+        zIndex: isActive ? 25 : 20,
+      }}
+      onClick={onClickContainer}
+    >
+      {/* OneNote Container Top Drag Handle (visible on hover or when active) */}
+      <div
+        onMouseDown={onStartDrag}
+        title="Drag to move this note container anywhere"
+        className={`h-5 w-full flex items-center justify-between px-2 rounded-t-xl cursor-grab transition-opacity ${
+          isActive
+            ? 'bg-purple-100/80 dark:bg-zinc-800/90 opacity-100'
+            : 'bg-gray-100/70 dark:bg-zinc-800/60 opacity-0 group-hover:opacity-100'
+        }`}
+      >
+        <div className="flex items-center gap-1 text-gray-400 dark:text-zinc-500">
+          <GripHorizontal className="w-3.5 h-3.5" />
+          <span className="text-[9px] font-medium uppercase tracking-wider text-gray-400">
+            Note Box
+          </span>
+        </div>
+
+        {/* Delete container button */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+          title="Delete this text box"
+          className="p-0.5 rounded hover:bg-red-100 dark:hover:bg-red-950/50 hover:text-red-600 text-gray-400 transition-colors"
+        >
+          <X className="w-3 h-3" />
+        </button>
+      </div>
+
+      {/* ContentEditable Text Area */}
+      <div
+        ref={editorRef}
+        id={`textbox_content_${box.id}`}
+        data-box-id={box.id}
+        contentEditable={!isDrawingMode}
+        suppressContentEditableWarning
+        onInput={(e) => onChangeContent(e.currentTarget.innerHTML)}
+        onFocus={onSelect}
+        style={{
+          fontFamily: box.fontFamily,
+          fontSize: box.fontSize,
+        }}
+        className={`onenote-text-editor p-2.5 min-h-[50px] outline-none text-base leading-relaxed ${
+          isDrawingMode ? 'pointer-events-none select-none' : 'pointer-events-auto'
+        } ${darkMode ? 'text-zinc-100' : 'text-gray-900'}`}
+      />
+
+      {/* Right Edge Horizontal Resizer */}
+      <div
+        onMouseDown={onStartResize}
+        title="Drag to resize box width"
+        className={`absolute right-0 top-5 bottom-0 w-2 cursor-ew-resize opacity-0 group-hover:opacity-100 hover:bg-purple-400/40 rounded-r-xl transition-opacity ${
+          isResizing ? 'bg-purple-500/50 opacity-100' : ''
+        }`}
+      />
+    </div>
+  );
+};
 
 interface NoteCanvasProps {
   contentHtml: string;
   onContentChange: (newHtml: string) => void;
+  textBoxes?: NoteTextBox[];
+  onTextBoxesChange?: (newBoxes: NoteTextBox[]) => void;
+  paperStyle?: PaperStyle;
+  onPaperStyleChange?: (newStyle: PaperStyle) => void;
   strokes: DrawingStroke[];
   onStrokesChange: (newStrokes: DrawingStroke[]) => void;
   isDrawingMode: boolean;
@@ -37,6 +173,9 @@ interface NoteCanvasProps {
 export const NoteCanvas: React.FC<NoteCanvasProps> = ({
   contentHtml,
   onContentChange,
+  textBoxes: propTextBoxes,
+  onTextBoxesChange,
+  paperStyle = 'blank',
   strokes,
   onStrokesChange,
   isDrawingMode,
@@ -51,21 +190,100 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const contentWrapperRef = useRef<HTMLDivElement>(null);
-  const editorRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Drawing state
   const [isPointerDown, setIsPointerDown] = useState(false);
   const currentStrokeRef = useRef<DrawingStroke | null>(null);
-  const [selectedImage, setSelectedImage] = useState<HTMLImageElement | null>(null);
 
   // PDF Viewer state
   const [pdfZoom, setPdfZoom] = useState<number>(100);
   const [isDraggingOver, setIsDraggingOver] = useState<boolean>(false);
   const [isLoadingPdf, setIsLoadingPdf] = useState<boolean>(false);
   const [pdfProgress, setPdfProgress] = useState<{ current: number; total: number } | null>(null);
+  const [showPdfDeleteMenu, setShowPdfDeleteMenu] = useState(false);
+  const [selectedPdfPageToDelete, setSelectedPdfPageToDelete] = useState<number>(1);
+  const [pageDeleteConfirm, setPageDeleteConfirm] = useState<number | null>(null);
+  const [dismissedPdfPrompt, setDismissedPdfPrompt] = useState(false);
 
-  // Redraw all strokes onto canvas
+  // OneNote Text Containers State
+  // Default to a primary box if none exist
+  const getInitialBoxes = (): NoteTextBox[] => {
+    if (propTextBoxes && propTextBoxes.length > 0) {
+      return propTextBoxes;
+    }
+    return [
+      {
+        id: 'box_initial',
+        x: 48,
+        y: 40,
+        width: 760,
+        content: contentHtml || '<p><br></p>',
+      },
+    ];
+  };
+
+  const [boxes, setBoxes] = useState<NoteTextBox[]>(getInitialBoxes);
+  const boxesRef = useRef<NoteTextBox[]>(boxes);
+  boxesRef.current = boxes;
+
+  const [activeBoxId, setActiveBoxId] = useState<string | null>(null);
+  const [draggedBoxId, setDraggedBoxId] = useState<string | null>(null);
+  const [resizingBoxId, setResizingBoxId] = useState<string | null>(null);
+
+  // Sync external changes to textBoxes prop
+  useEffect(() => {
+    if (propTextBoxes && propTextBoxes.length > 0) {
+      setBoxes(propTextBoxes);
+      boxesRef.current = propTextBoxes;
+    }
+  }, [propTextBoxes]);
+
+  const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Safely sync back to parent asynchronously to avoid any setState during render
+  const syncBoxes = useCallback(
+    (newBoxes: NoteTextBox[]) => {
+      setBoxes(newBoxes);
+      boxesRef.current = newBoxes;
+
+      if (syncTimeoutRef.current) {
+        clearTimeout(syncTimeoutRef.current);
+      }
+      syncTimeoutRef.current = setTimeout(() => {
+        if (onTextBoxesChange) {
+          onTextBoxesChange(newBoxes);
+        } else if (onContentChange) {
+          const merged = newBoxes.map((b) => b.content).join('<hr/>');
+          onContentChange(merged);
+        }
+      }, 0);
+    },
+    [onTextBoxesChange, onContentChange]
+  );
+
+  useEffect(() => {
+    return () => {
+      if (syncTimeoutRef.current) {
+        clearTimeout(syncTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Close menus when clicking outside
+  useEffect(() => {
+    const handleGlobalClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('#pdf-delete-menu-container')) {
+        setShowPdfDeleteMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleGlobalClick);
+    return () => document.removeEventListener('mousedown', handleGlobalClick);
+  }, []);
+
+  // Redraw all strokes onto drawing canvas
   const redrawAllStrokes = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -117,14 +335,33 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
     });
   }, [strokes]);
 
+  // Compute minimum canvas height so scrolling and canvas expand to fit all boxes and PDF
+  const wrapperMinHeight = useMemo(() => {
+    let maxY = 1400;
+    boxes.forEach((b) => {
+      if (b.y + 400 > maxY) maxY = b.y + 400;
+    });
+    if (pdfData && pdfData.pages.length > 0) {
+      const estimatedPdfHeight = pdfData.pages.length * 1150 * (pdfZoom / 100) + 200;
+      if (estimatedPdfHeight > maxY) maxY = estimatedPdfHeight;
+    }
+    return maxY;
+  }, [boxes, pdfData, pdfZoom]);
+
   // Resize canvas to match the content wrapper dimensions
   const updateCanvasDimensions = useCallback(() => {
     const wrapper = contentWrapperRef.current;
     const canvas = canvasRef.current;
     if (!wrapper || !canvas) return;
 
-    const width = wrapper.clientWidth;
-    const height = Math.max(wrapper.scrollHeight, 800);
+    // Calculate maximum extent based on boxes, PDF pages, and wrapper height
+    let maxY = Math.max(wrapper.scrollHeight, wrapper.clientHeight, 1400);
+    boxes.forEach((b) => {
+      if (b.y + 400 > maxY) maxY = b.y + 400;
+    });
+
+    const width = wrapper.clientWidth || 900;
+    const height = maxY;
 
     const dpr = window.devicePixelRatio || 1;
     canvas.width = width * dpr;
@@ -137,9 +374,8 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
       ctx.scale(dpr, dpr);
     }
     redrawAllStrokes();
-  }, [redrawAllStrokes]);
+  }, [redrawAllStrokes, boxes]);
 
-  // Observe wrapper resize (e.g. PDF loaded, zoomed, or window resized)
   useEffect(() => {
     updateCanvasDimensions();
     const wrapper = contentWrapperRef.current;
@@ -155,22 +391,208 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
       ro.disconnect();
       window.removeEventListener('resize', updateCanvasDimensions);
     };
-  }, [updateCanvasDimensions, pdfData, pdfZoom]);
+  }, [updateCanvasDimensions, pdfData, pdfZoom, boxes]);
 
   useEffect(() => {
     redrawAllStrokes();
   }, [strokes, redrawAllStrokes]);
 
-  // Handle editor HTML initialization
-  useEffect(() => {
-    if (editorRef.current && contentHtml !== undefined) {
-      if (editorRef.current.innerHTML !== contentHtml) {
-        editorRef.current.innerHTML = contentHtml;
+  // ==================== ONE-NOTE "WRITE ANYWHERE" CLICK HANDLER ====================
+  const handleWrapperClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    // If in drawing mode, the canvas handles pointer events
+    if (isDrawingMode) return;
+
+    const target = e.target as HTMLElement;
+
+    // If clicked on an existing box, button, input, select, or marked control, ignore
+    if (
+      target.closest('.onenote-box-container') ||
+      target.closest('button') ||
+      target.closest('input') ||
+      target.closest('select') ||
+      target.closest('.no-create-box')
+    ) {
+      return;
+    }
+
+    const wrapper = contentWrapperRef.current;
+    if (!wrapper) return;
+
+    const rect = wrapper.getBoundingClientRect();
+    const clickX = Math.round(e.clientX - rect.left);
+    const clickY = Math.round(e.clientY - rect.top);
+
+    // Filter out previous empty boxes (boxes with no typed text, no images, and no checkboxes)
+    const cleanedBoxes = boxesRef.current.filter((b) => {
+      const hasImage = b.content.includes('<img');
+      const hasCheckbox = b.content.includes('type="checkbox"');
+      const textOnly = b.content.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, '').trim();
+      return hasImage || hasCheckbox || textOnly.length > 0;
+    });
+
+    // Align the new box so the text caret lands precisely under the click position:
+    // OneNoteTextBoxView has a 20px top drag handle + ~6px font baseline offset, and 10px left padding
+    const desiredX = Math.max(16, clickX - 10);
+    const desiredY = Math.max(16, clickY - 26);
+
+    const availableWidth = wrapper.clientWidth - desiredX - 24;
+    const boxWidth = Math.max(280, Math.min(680, availableWidth));
+    const finalX = Math.max(16, Math.min(desiredX, wrapper.clientWidth - boxWidth - 16));
+
+    const newId = `box_${Date.now()}`;
+    const newBox: NoteTextBox = {
+      id: newId,
+      x: finalX,
+      y: desiredY,
+      width: boxWidth,
+      content: '<p><br></p>',
+    };
+
+    const nextBoxes = [...cleanedBoxes, newBox];
+    syncBoxes(nextBoxes);
+    setActiveBoxId(newId);
+
+    // Focus the newly created box and position caret inside
+    setTimeout(() => {
+      const editorEl = document.getElementById(`textbox_content_${newId}`);
+      if (editorEl) {
+        editorEl.focus();
+        const range = document.createRange();
+        const sel = window.getSelection();
+        range.selectNodeContents(editorEl);
+        range.collapse(false);
+        sel?.removeAllRanges();
+        sel?.addRange(range);
+      }
+    }, 40);
+  };
+
+  // Dragging a text container
+  const handleStartDragBox = (boxId: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const targetBox = boxes.find((b) => b.id === boxId);
+    if (!targetBox) return;
+
+    setActiveBoxId(boxId);
+    setDraggedBoxId(boxId);
+
+    const startMouseX = e.clientX;
+    const startMouseY = e.clientY;
+    const startBoxX = targetBox.x;
+    const startBoxY = targetBox.y;
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const deltaX = moveEvent.clientX - startMouseX;
+      const deltaY = moveEvent.clientY - startMouseY;
+
+      const newX = Math.max(16, startBoxX + deltaX);
+      const newY = Math.max(16, startBoxY + deltaY);
+
+      setBoxes((prev) =>
+        prev.map((b) => (b.id === boxId ? { ...b, x: newX, y: newY } : b))
+      );
+    };
+
+    const onMouseUp = () => {
+      setDraggedBoxId(null);
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+
+      // Persist final position safely using boxesRef.current
+      syncBoxes(boxesRef.current);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  };
+
+  // Resizing a text container horizontally
+  const handleStartResizeBox = (boxId: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const targetBox = boxes.find((b) => b.id === boxId);
+    if (!targetBox) return;
+
+    setResizingBoxId(boxId);
+    const startMouseX = e.clientX;
+    const startWidth = targetBox.width;
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const deltaX = moveEvent.clientX - startMouseX;
+      const newWidth = Math.max(220, Math.min(1100, startWidth + deltaX));
+
+      setBoxes((prev) =>
+        prev.map((b) => (b.id === boxId ? { ...b, width: newWidth } : b))
+      );
+    };
+
+    const onMouseUp = () => {
+      setResizingBoxId(null);
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+
+      // Persist final dimensions safely using boxesRef.current
+      syncBoxes(boxesRef.current);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  };
+
+  // Delete a specific text container
+  const handleDeleteBox = (boxId: string) => {
+    const remaining = boxes.filter((b) => b.id !== boxId);
+    if (remaining.length === 0) {
+      // Keep at least one box ready to type
+      remaining.push({
+        id: `box_${Date.now()}`,
+        x: 36,
+        y: 28,
+        width: 760,
+        content: '<p><br></p>',
+      });
+    }
+    syncBoxes(remaining);
+    setActiveBoxId(remaining[0].id);
+  };
+
+  // Update content of a box
+  const handleBoxInput = (boxId: string, newHtml: string) => {
+    const updated = boxesRef.current.map((b) => (b.id === boxId ? { ...b, content: newHtml } : b));
+    setBoxes(updated);
+    boxesRef.current = updated;
+
+    if (syncTimeoutRef.current) {
+      clearTimeout(syncTimeoutRef.current);
+    }
+    syncTimeoutRef.current = setTimeout(() => {
+      if (onTextBoxesChange) {
+        onTextBoxesChange(updated);
+      } else if (onContentChange) {
+        const merged = updated.map((b) => b.content).join('<hr/>');
+        onContentChange(merged);
+      }
+    }, 120);
+  };
+
+  // Toggle checklist checkbox inside any box
+  const handleBoxClick = (boxId: string, e: React.MouseEvent) => {
+    setActiveBoxId(boxId);
+    const target = e.target as HTMLElement;
+    if (target.matches('input[type="checkbox"]')) {
+      const input = target as HTMLInputElement;
+      input.setAttribute('checked', input.checked ? 'true' : 'false');
+      const container = document.getElementById(`textbox_content_${boxId}`);
+      if (container) {
+        handleBoxInput(boxId, container.innerHTML);
       }
     }
-  }, [contentHtml]);
+  };
 
-  // Handle pointer down for drawing
+  // ==================== DRAWING POINTER HANDLERS ====================
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!isDrawingMode) return;
     const canvas = canvasRef.current;
@@ -219,7 +641,13 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
         ctx.lineWidth = thickness;
       }
       ctx.beginPath();
-      ctx.arc(x, y, (currentTool === 'highlighter' ? Math.max(thickness * 3, 14) : thickness) / 2, 0, Math.PI * 2);
+      ctx.arc(
+        x,
+        y,
+        (currentTool === 'highlighter' ? Math.max(thickness * 3, 14) : thickness) / 2,
+        0,
+        Math.PI * 2
+      );
       ctx.fillStyle = color;
       ctx.fill();
       ctx.restore();
@@ -293,7 +721,6 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
     }
   };
 
-  // Erase whole stroke if distance to any segment is within radius
   const eraseStrokeAt = (x: number, y: number) => {
     const radius = Math.max(16, thickness * 2);
     let hitIndex = -1;
@@ -316,7 +743,6 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
     }
   };
 
-  // Erase points near cursor
   const eraseSegmentAt = (x: number, y: number) => {
     const radius = Math.max(10, thickness * 1.5);
     let changed = false;
@@ -328,7 +754,11 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
       stroke.points.forEach((pt) => {
         if (Math.hypot(pt.x - x, pt.y - y) <= radius) {
           if (currentSegment.length > 0) {
-            nextStrokes.push({ ...stroke, id: `${stroke.id}_seg_${Math.random()}`, points: currentSegment });
+            nextStrokes.push({
+              ...stroke,
+              id: `${stroke.id}_seg_${Math.random()}`,
+              points: currentSegment,
+            });
             currentSegment = [];
           }
           changed = true;
@@ -347,40 +777,7 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
     }
   };
 
-  // Sync contenteditable input back
-  const handleEditorInput = () => {
-    if (editorRef.current) {
-      onContentChange(editorRef.current.innerHTML);
-    }
-  };
-
-  // Image resizing listener
-  const handleEditorClick = (e: React.MouseEvent) => {
-    const target = e.target as HTMLElement;
-    if (target.tagName === 'IMG' && !target.closest('.pdf-pages-stack')) {
-      setSelectedImage(target as HTMLImageElement);
-    } else {
-      setSelectedImage(null);
-    }
-
-    // Toggle checklist checkbox
-    if (target.matches('input[type="checkbox"]')) {
-      const input = target as HTMLInputElement;
-      input.setAttribute('checked', input.checked ? 'true' : 'false');
-      handleEditorInput();
-    }
-  };
-
-  const handleResizeImage = (percent: number) => {
-    if (selectedImage) {
-      selectedImage.style.width = `${percent}%`;
-      selectedImage.style.height = 'auto';
-      selectedImage.style.maxWidth = '100%';
-      handleEditorInput();
-    }
-  };
-
-  // Process uploaded PDF file
+  // ==================== PDF PROCESSING & TWO-OPTION DELETION ====================
   const processPdfFile = async (file: File) => {
     try {
       setIsLoadingPdf(true);
@@ -391,16 +788,59 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
       if (onPdfDataChange) {
         onPdfDataChange(processed);
       }
+      setSelectedPdfPageToDelete(1);
     } catch (err) {
       console.error('Failed to parse PDF file:', err);
-      alert('Could not render PDF. Please ensure this is a valid PDF document.');
     } finally {
       setIsLoadingPdf(false);
       setPdfProgress(null);
     }
   };
 
-  // Drag & Drop handlers
+  // Option 1: Delete a single selected page
+  const handleDeleteSinglePdfPage = (pageNumberToDelete: number) => {
+    if (!pdfData) return;
+
+    const remainingPages = pdfData.pages.filter((p) => p.pageNumber !== pageNumberToDelete);
+
+    if (remainingPages.length === 0) {
+      // If all pages removed, clear the PDF document
+      if (onPdfDataChange) onPdfDataChange(undefined);
+      setShowPdfDeleteMenu(false);
+      setPageDeleteConfirm(null);
+      return;
+    }
+
+    // Re-index remaining pages
+    const reindexed = remainingPages.map((p, idx) => ({
+      ...p,
+      pageNumber: idx + 1,
+    }));
+
+    const updatedPdf: PdfDocumentData = {
+      ...pdfData,
+      totalPages: reindexed.length,
+      pages: reindexed,
+    };
+
+    if (onPdfDataChange) {
+      onPdfDataChange(updatedPdf);
+    }
+    setShowPdfDeleteMenu(false);
+    setPageDeleteConfirm(null);
+    setSelectedPdfPageToDelete((prev) => Math.min(prev, reindexed.length));
+  };
+
+  // Option 2: Delete all pages (remove PDF completely)
+  const handleDeleteAllPdfPages = () => {
+    if (onPdfDataChange) {
+      onPdfDataChange(undefined);
+    }
+    setShowPdfDeleteMenu(false);
+    setPageDeleteConfirm(null);
+  };
+
+  // Drag & Drop handlers for embedding PDF
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     if (e.dataTransfer.types.includes('Files')) {
@@ -424,26 +864,13 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
     }
   };
 
-  // Load sample DBMS PDF
-  const handleLoadSamplePdf = () => {
-    setIsLoadingPdf(true);
-    setTimeout(() => {
-      const sample = createSamplePdfData();
-      if (onPdfDataChange) {
-        onPdfDataChange(sample);
-      }
-      setIsLoadingPdf(false);
-    }, 150);
-  };
-
-  // Remove PDF
-  const handleRemovePdf = () => {
-    if (window.confirm('Remove this PDF from the note? Your written notes and drawings will remain.')) {
-      if (onPdfDataChange) {
-        onPdfDataChange(undefined);
-      }
-    }
-  };
+  // Paper Style Background Class
+  const paperClass =
+    paperStyle === 'ruled'
+      ? 'paper-ruled'
+      : paperStyle === 'grid'
+      ? 'paper-grid'
+      : '';
 
   return (
     <div
@@ -451,7 +878,7 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className={`relative flex-1 w-full overflow-y-auto min-h-[500px] transition-colors ${
+      className={`relative flex-1 w-full overflow-y-auto overflow-x-auto min-h-[600px] transition-colors select-auto ${paperClass} ${
         darkMode ? 'bg-[#18181b] text-zinc-100' : 'bg-white text-gray-900'
       }`}
     >
@@ -465,7 +892,7 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
             Drop PDF here to embed into note
           </p>
           <p className="text-sm text-gray-600 dark:text-zinc-400">
-            Pages will be rendered and ready to draw on
+            Pages will be embedded and ready to write & draw on
           </p>
         </div>
       )}
@@ -485,42 +912,23 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
         </div>
       )}
 
-      {/* Image Resizer Overlay Bar */}
-      {selectedImage && (
-        <div className="fixed z-40 top-32 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl shadow-lg">
-          <span className="text-xs font-semibold text-gray-500 mr-1">Image Size:</span>
-          {[25, 50, 75, 100].map((size) => (
-            <button
-              key={size}
-              type="button"
-              onClick={() => handleResizeImage(size)}
-              className="px-2 py-1 text-xs font-medium rounded-md bg-gray-100 dark:bg-zinc-700 hover:bg-purple-100 hover:text-purple-700 text-gray-700 dark:text-zinc-200"
-            >
-              {size}%
-            </button>
-          ))}
-          <button
-            type="button"
-            onClick={() => setSelectedImage(null)}
-            className="ml-2 text-xs text-gray-400 hover:text-gray-600 px-1"
-          >
-            ✕
-          </button>
-        </div>
-      )}
-
-      {/* Document Column Wrapper */}
-      <div ref={contentWrapperRef} className="relative w-full max-w-4xl mx-auto px-6 py-6 min-h-full">
-        
-        {/* PDF Document Viewer Layer (When PDF is loaded) */}
-        {pdfData && pdfData.pages.length > 0 ? (
-          <div className="pdf-container mb-8 select-none">
+      {/* Main Expansive Content Area (Click anywhere to add OneNote container) */}
+      <div
+        ref={contentWrapperRef}
+        onClick={handleWrapperClick}
+        style={{ minHeight: `${wrapperMinHeight}px` }}
+        className="relative w-full p-6 cursor-text select-text"
+        title={!isDrawingMode ? 'Click anywhere on the page to start writing' : undefined}
+      >
+        {/* PDF Document Section (If PDF is attached) */}
+        {pdfData && pdfData.pages.length > 0 && (
+          <div className="pdf-container relative z-10 max-w-4xl mx-auto mb-10 select-none">
             {/* PDF Header Controls */}
             <div
-              className={`flex flex-col sm:flex-row sm:items-center justify-between p-3.5 mb-5 rounded-2xl border transition-colors shadow-2xs gap-3 ${
+              className={`pdf-header-controls no-create-box flex flex-col sm:flex-row sm:items-center justify-between p-3.5 mb-5 rounded-2xl border transition-colors shadow-2xs gap-3 ${
                 darkMode
-                  ? 'bg-zinc-800/80 border-zinc-700 text-zinc-100'
-                  : 'bg-gray-50/90 border-gray-200 text-gray-800'
+                  ? 'bg-zinc-800/90 border-zinc-700 text-zinc-100'
+                  : 'bg-gray-50/95 border-gray-200 text-gray-800'
               }`}
             >
               <div className="flex items-center gap-3 min-w-0">
@@ -533,25 +941,21 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
                   </div>
                   <div className="text-xs text-gray-500 dark:text-zinc-400 flex items-center gap-2">
                     <span className="font-semibold text-purple-600 dark:text-purple-400">
-                      {pdfData.totalPages} pages
+                      {pdfData.totalPages} {pdfData.totalPages === 1 ? 'page' : 'pages'}
                     </span>
                     <span>•</span>
                     <span>{(pdfData.fileSize / 1024).toFixed(0)} KB</span>
                     <span>•</span>
-                    <span>Ready for drawing</span>
+                    <span>Write & draw anywhere over pages</span>
                   </div>
                 </div>
               </div>
 
               <div className="flex items-center gap-2 flex-shrink-0">
-                {/* Quick Toggle Draw on PDF */}
+                {/* Draw on PDF toggle */}
                 <button
                   type="button"
-                  onClick={() => {
-                    if (onToggleDrawing) {
-                      onToggleDrawing();
-                    }
-                  }}
+                  onClick={() => onToggleDrawing && onToggleDrawing()}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors shadow-2xs ${
                     isDrawingMode
                       ? 'bg-[#7F56D9] text-white'
@@ -561,7 +965,7 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
                   }`}
                 >
                   <PenTool className="w-3.5 h-3.5" />
-                  <span>{isDrawingMode ? 'Drawing On' : 'Draw on PDF'}</span>
+                  <span>{isDrawingMode ? 'Drawing Active' : 'Draw on PDF'}</span>
                 </button>
 
                 {/* PDF Zoom Controls */}
@@ -587,24 +991,90 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
                   </button>
                 </div>
 
-                {/* Remove PDF Button */}
-                <button
-                  type="button"
-                  onClick={handleRemovePdf}
-                  title="Remove PDF from note"
-                  className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                {/* PDF DELETE OPTIONS MENU: (1) Delete Selected Page, (2) Delete All Pages */}
+                <div className="relative inline-block" id="pdf-delete-menu-container">
+                  <button
+                    id="pdf-delete-options-trigger"
+                    type="button"
+                    onClick={() => setShowPdfDeleteMenu(!showPdfDeleteMenu)}
+                    title="Delete PDF pages..."
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 border border-red-200 dark:border-red-900/50 transition-colors shadow-2xs"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete PDF...</span>
+                  </button>
+
+                  {showPdfDeleteMenu && (
+                    <div
+                      className={`absolute right-0 top-9 z-50 w-72 p-3 rounded-2xl border shadow-xl animate-in fade-in zoom-in-95 ${
+                        darkMode
+                          ? 'bg-zinc-800 border-zinc-700 text-zinc-100'
+                          : 'bg-white border-gray-200 text-gray-800'
+                      }`}
+                    >
+                      <div className="text-xs font-bold text-gray-900 dark:text-white mb-2 pb-1.5 border-b border-gray-100 dark:border-zinc-700">
+                        Delete PDF Options
+                      </div>
+
+                      {/* Option 1: Delete One Selected Page */}
+                      <div className="p-2 rounded-xl bg-gray-50 dark:bg-zinc-700/50 mb-2.5">
+                        <div className="text-xs font-semibold text-gray-800 dark:text-zinc-200 mb-1.5 flex items-center justify-between">
+                          <span>Delete Selected Page</span>
+                          <span className="text-[10px] text-gray-500">1 of {pdfData.totalPages}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={selectedPdfPageToDelete}
+                            onChange={(e) => setSelectedPdfPageToDelete(Number(e.target.value))}
+                            className="flex-1 px-2 py-1 text-xs rounded-lg border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-gray-800 dark:text-zinc-200"
+                          >
+                            {pdfData.pages.map((p) => (
+                              <option key={p.pageNumber} value={p.pageNumber}>
+                                Page {p.pageNumber}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteSinglePdfPage(selectedPdfPageToDelete)}
+                            className="px-2.5 py-1 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-medium transition-colors"
+                          >
+                            Delete Page
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Option 2: Delete All Pages */}
+                      <button
+                        type="button"
+                        onClick={handleDeleteAllPdfPages}
+                        className="w-full flex items-center justify-between p-2 rounded-xl text-left bg-red-50 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-900/50 text-red-700 dark:text-red-300 text-xs font-semibold transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Delete All Pages (Remove PDF)</span>
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setShowPdfDeleteMenu(false)}
+                        className="w-full mt-2 text-center text-[11px] text-gray-500 hover:text-gray-700 dark:hover:text-zinc-300 py-1"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
-            {/* Rendered High-Res PDF Pages Stack */}
+            {/* PDF Pages Stack with Per-Page Quick Delete */}
             <div className="pdf-pages-stack flex flex-col items-center gap-6">
               {pdfData.pages.map((page) => (
                 <div
                   key={page.pageNumber}
-                  className="relative rounded-2xl overflow-hidden shadow-md border border-gray-200 dark:border-zinc-700 bg-white transition-all"
+                  className="relative rounded-2xl overflow-hidden shadow-md border border-gray-200 dark:border-zinc-700 bg-white transition-all group"
                   style={{ width: `${pdfZoom}%`, maxWidth: '100%' }}
                 >
                   <img
@@ -613,82 +1083,128 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
                     className="w-full h-auto block select-none pointer-events-none"
                     draggable={false}
                   />
-                  <div className="absolute bottom-3 right-3 px-2.5 py-1 rounded-md bg-black/65 backdrop-blur-xs text-white text-[11px] font-medium shadow-xs">
-                    Page {page.pageNumber} of {pdfData.totalPages}
+
+                  {/* Top Bar with Page Number & Individual Delete Button */}
+                  <div className="absolute top-3 right-3 flex items-center gap-1.5 z-10">
+                    <span className="px-2.5 py-1 rounded-md bg-black/70 backdrop-blur-xs text-white text-[11px] font-medium shadow-xs">
+                      Page {page.pageNumber} of {pdfData.totalPages}
+                    </span>
+
+                    {/* Per-Page Delete Button */}
+                    {pageDeleteConfirm === page.pageNumber ? (
+                      <div className="flex items-center gap-1 bg-red-600 text-white rounded-md p-0.5 shadow-md animate-in fade-in">
+                        <span className="text-[10px] font-bold px-1">Delete page?</span>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteSinglePdfPage(page.pageNumber)}
+                          className="px-1.5 py-0.5 rounded bg-white text-red-600 font-bold text-[10px] hover:bg-red-50"
+                        >
+                          Yes
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPageDeleteConfirm(null)}
+                          className="px-1 py-0.5 text-[10px] hover:text-white/80"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setPageDeleteConfirm(page.pageNumber)}
+                        title={`Delete Page ${page.pageNumber}`}
+                        className="p-1 rounded-md bg-black/60 hover:bg-red-600 text-white transition-colors opacity-80 hover:opacity-100"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
             </div>
           </div>
-        ) : (
-          /* Embed PDF Prompt Banner (When NO PDF is present) */
-          <div
-            className={`p-4 mb-6 rounded-2xl border border-dashed flex flex-col sm:flex-row items-center justify-between gap-3 transition-colors ${
-              darkMode
-                ? 'border-zinc-700/80 bg-zinc-800/30 text-zinc-300'
-                : 'border-purple-200 bg-purple-50/30 text-gray-700'
-            }`}
-          >
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-9 h-9 rounded-xl bg-purple-100 dark:bg-purple-950 text-[#7F56D9] flex items-center justify-center flex-shrink-0">
-                <FileText className="w-4 h-4" />
-              </div>
-              <div className="truncate">
-                <div className={`text-xs font-bold truncate ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-                  Embed PDF inside this note to draw and annotate
+        )}
+
+        {/* Empty PDF Prompt Banner - only shown if completely fresh note and not dismissed */}
+        {(!pdfData || pdfData.pages.length === 0) &&
+          !dismissedPdfPrompt &&
+          !boxes.some((b) => b.content.replace(/<[^>]*>/g, '').trim().length > 0) && (
+            <div className="max-w-2xl mx-auto mb-6 select-none no-create-box">
+              <div
+                className={`p-3 rounded-xl border border-dashed flex items-center justify-between gap-3 transition-colors ${
+                  darkMode
+                    ? 'border-zinc-700/80 bg-zinc-800/30 text-zinc-300'
+                    : 'border-purple-200 bg-purple-50/20 text-gray-700'
+                }`}
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-7 h-7 rounded-lg bg-purple-100 dark:bg-purple-950 text-[#7F56D9] flex items-center justify-center flex-shrink-0">
+                    <FileText className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="truncate text-xs">
+                    <span className={`font-semibold ${darkMode ? 'text-zinc-200' : 'text-gray-800'}`}>
+                      Embed PDF Document
+                    </span>
+                    <span className="hidden sm:inline text-gray-400 dark:text-zinc-500 ml-1.5">
+                      — Drag & drop or upload any PDF to annotate and draw on
+                    </span>
+                  </div>
                 </div>
-                <div className="text-[11px] text-gray-500 dark:text-zinc-400">
-                  Drag & drop any lecture handout or choose sample DBMS PDF
+
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      fileInputRef.current?.click();
+                    }}
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs font-semibold text-gray-700 dark:text-zinc-200 hover:bg-gray-50 dark:hover:bg-zinc-700 shadow-2xs transition-colors"
+                  >
+                    <Upload className="w-3.5 h-3.5 text-purple-600" />
+                    <span>Upload PDF</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDismissedPdfPrompt(true);
+                    }}
+                    title="Dismiss hint"
+                    className="p-1 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-zinc-300 hover:bg-gray-200/50 dark:hover:bg-zinc-700 transition-colors"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
             </div>
+          )}
 
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs font-semibold text-gray-700 dark:text-zinc-200 hover:bg-gray-50 dark:hover:bg-zinc-700 shadow-2xs transition-colors"
-              >
-                <Upload className="w-3.5 h-3.5 text-gray-500" />
-                <span>Upload PDF</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleLoadSamplePdf}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#7F56D9] text-white text-xs font-semibold hover:bg-[#6941C6] shadow-2xs transition-colors"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Sample DBMS PDF</span>
-              </button>
-            </div>
-          </div>
-        )}
+        {/* ==================== ONENOTE FREEFORM TEXT BOXES LAYER ==================== */}
+        <div className="absolute inset-0 pointer-events-none z-20">
+          {boxes.map((box) => (
+            <OneNoteTextBoxView
+              key={box.id}
+              box={box}
+              isActive={activeBoxId === box.id}
+              isDragging={draggedBoxId === box.id}
+              isResizing={resizingBoxId === box.id}
+              isDrawingMode={isDrawingMode}
+              darkMode={darkMode}
+              onSelect={() => setActiveBoxId(box.id)}
+              onStartDrag={(e) => handleStartDragBox(box.id, e)}
+              onStartResize={(e) => handleStartResizeBox(box.id, e)}
+              onDelete={() => handleDeleteBox(box.id)}
+              onChangeContent={(html) => handleBoxInput(box.id, html)}
+              onClickContainer={(e) => {
+                e.stopPropagation();
+                handleBoxClick(box.id, e);
+              }}
+            />
+          ))}
+        </div>
 
-        {/* Section Divider between PDF and Text Notes */}
-        {pdfData && pdfData.pages.length > 0 && (
-          <div className="flex items-center gap-3 my-7 select-none">
-            <div className="h-px bg-gray-200 dark:bg-zinc-800 flex-1" />
-            <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-zinc-500">
-              Written Notes & Summary
-            </span>
-            <div className="h-px bg-gray-200 dark:bg-zinc-800 flex-1" />
-          </div>
-        )}
-
-        {/* Rich Text Editor Content Layer */}
-        <div
-          ref={editorRef}
-          id="note-editor-content"
-          contentEditable={!isDrawingMode}
-          suppressContentEditableWarning
-          onInput={handleEditorInput}
-          onClick={handleEditorClick}
-          className={`w-full min-h-[350px] outline-none text-base leading-relaxed ${
-            isDrawingMode ? 'pointer-events-none select-none' : 'pointer-events-auto'
-          }`}
-        />
-
-        {/* Drawing Canvas Overlay (Overlays PDF + Text notes) */}
+        {/* ==================== DRAWING CANVAS OVERLAY ==================== */}
         <canvas
           ref={canvasRef}
           id="note-drawing-canvas"
@@ -697,16 +1213,18 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
           className={`absolute inset-0 w-full h-full ${
-            isDrawingMode ? 'pointer-events-auto cursor-crosshair z-20' : 'pointer-events-none z-0'
+            isDrawingMode
+              ? 'pointer-events-auto cursor-crosshair z-30'
+              : 'pointer-events-none z-10'
           }`}
         />
       </div>
 
       {/* Drawing Mode Active Status Floating Pill */}
       {isDrawingMode && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 px-4 py-2 rounded-full bg-zinc-900/90 dark:bg-zinc-100/90 text-white dark:text-zinc-900 shadow-xl backdrop-blur-xs border border-white/10 text-xs font-medium animate-in fade-in slide-in-from-bottom-2">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 px-4 py-2 rounded-full bg-zinc-900/90 dark:bg-zinc-100/90 text-white dark:text-zinc-900 shadow-xl backdrop-blur-xs border border-white/10 text-xs font-medium animate-in fade-in slide-in-from-bottom-2">
           <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span>Drawing Mode Active — Draw anywhere over PDF pages and notes</span>
+          <span>Drawing Mode Active — Draw anywhere over notes & PDF</span>
           {onToggleDrawing && (
             <button
               type="button"

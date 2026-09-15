@@ -6,6 +6,7 @@ interface DashboardViewProps {
   notes: NoteItem[];
   onSelectNote: (noteId: string) => void;
   onCreateNote: (subject?: string, topic?: string) => void;
+  onViewSubject?: (subject: string) => void;
   darkMode?: boolean;
 }
 
@@ -13,6 +14,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   notes,
   onSelectNote,
   onCreateNote,
+  onViewSubject,
   darkMode = false,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -85,7 +87,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               return (
                 <div
                   key={sub}
-                  onClick={() => subNotes[0] && onSelectNote(subNotes[0].id)}
+                  onClick={() => {
+                    if (onViewSubject) {
+                      onViewSubject(sub);
+                    } else if (subNotes[0]) {
+                      onSelectNote(subNotes[0].id);
+                    }
+                  }}
                   className={`p-5 rounded-2xl border transition-all cursor-pointer hover:-translate-y-0.5 shadow-2xs ${
                     darkMode
                       ? 'bg-zinc-800/80 border-zinc-700 hover:border-purple-500/50'

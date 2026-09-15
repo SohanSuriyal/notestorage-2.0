@@ -61,20 +61,21 @@ export const NotesHeader: React.FC<NotesHeaderProps> = ({
   };
 
   return (
-    <header className="flex items-center justify-between gap-4 py-2 select-none">
+    <header className="flex flex-wrap items-center justify-between gap-3 py-2 select-none">
       {/* Left side: Back to notes + Note Title */}
-      <div className="flex items-center gap-5 min-w-0">
+      <div className="flex items-center gap-3 sm:gap-5 min-w-0 flex-1">
         <button
+          type="button"
           id="back-to-notes-btn"
           onClick={onBack}
-          className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border text-sm font-medium transition-colors shadow-2xs ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition-all active:scale-95 shadow-2xs cursor-pointer ${
             darkMode
-              ? 'border-zinc-700 bg-zinc-800/80 text-zinc-200 hover:bg-zinc-800'
-              : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+              ? 'border-zinc-700 bg-zinc-800/80 text-zinc-200 hover:bg-zinc-800 active:bg-zinc-700'
+              : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 active:bg-gray-100'
           }`}
         >
           <ChevronLeft className="w-4 h-4 text-gray-500 dark:text-zinc-400" />
-          <span>Notes</span>
+          <span className="hidden xs:inline sm:inline">Notes</span>
         </button>
 
         {isEditingTitle ? (
@@ -86,7 +87,7 @@ export const NotesHeader: React.FC<NotesHeaderProps> = ({
             onChange={(e) => setTitleDraft(e.target.value)}
             onBlur={handleSaveTitle}
             onKeyDown={handleKeyDown}
-            className={`text-2xl font-bold tracking-tight px-1 py-0.5 rounded-md border outline-none ${
+            className={`text-xl sm:text-2xl font-bold tracking-tight px-1 py-0.5 rounded-md border outline-none min-w-0 max-w-full ${
               darkMode
                 ? 'bg-zinc-800 border-zinc-700 text-white'
                 : 'bg-white border-purple-400 text-gray-900 ring-2 ring-purple-100'
@@ -96,7 +97,7 @@ export const NotesHeader: React.FC<NotesHeaderProps> = ({
           <h1
             id="note-title-heading"
             onClick={() => setIsEditingTitle(true)}
-            className={`text-2xl font-bold tracking-tight cursor-pointer hover:opacity-80 transition-opacity truncate ${
+            className={`text-xl sm:text-2xl font-bold tracking-tight cursor-pointer hover:opacity-80 transition-opacity truncate max-w-[200px] sm:max-w-md ${
               darkMode ? 'text-white' : 'text-gray-900'
             }`}
             title="Click to rename"
@@ -107,54 +108,58 @@ export const NotesHeader: React.FC<NotesHeaderProps> = ({
       </div>
 
       {/* Right side: Saved badge, Rename, Export, Delete */}
-      <div className="flex items-center gap-2.5 flex-shrink-0">
+      <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap flex-shrink-0">
         {/* Saved Status Indicator */}
-        <div className="flex items-center gap-1.5 mr-2">
-          <CheckCircle2 className="w-4 h-4 text-[#12B76A] fill-[#12B76A] text-white" />
-          <span className="text-sm font-normal text-gray-600 dark:text-zinc-400">
+        <div className="flex items-center gap-1.5 mr-1 sm:mr-2">
+          <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#12B76A] fill-[#12B76A]" />
+          <span className="text-xs sm:text-sm font-normal text-gray-600 dark:text-zinc-400">
             {isSaved ? 'Saved' : 'Saving...'}
           </span>
         </div>
 
         {/* Rename Button */}
         <button
+          type="button"
           id="rename-note-btn"
           onClick={() => setIsEditingTitle(true)}
-          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg border text-sm font-medium transition-colors shadow-2xs ${
+          className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-1.5 rounded-lg border text-xs sm:text-sm font-medium transition-all active:scale-95 shadow-2xs cursor-pointer ${
             darkMode
-              ? 'border-zinc-700 bg-zinc-800/80 text-zinc-200 hover:bg-zinc-800'
-              : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+              ? 'border-zinc-700 bg-zinc-800/80 text-zinc-200 hover:bg-zinc-800 active:bg-zinc-700'
+              : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 active:bg-gray-100'
           }`}
         >
-          <Pencil className="w-4 h-4 text-gray-600 dark:text-zinc-400" />
-          <span>Rename</span>
+          <Pencil className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-600 dark:text-zinc-400" />
+          <span className="hidden xs:inline sm:inline">Rename</span>
         </button>
 
         {/* Export Button */}
         <button
+          type="button"
           id="export-note-btn"
           onClick={onExport}
-          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg border text-sm font-medium transition-colors shadow-2xs ${
+          className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-1.5 rounded-lg border text-xs sm:text-sm font-medium transition-all active:scale-95 shadow-2xs cursor-pointer ${
             darkMode
-              ? 'border-zinc-700 bg-zinc-800/80 text-zinc-200 hover:bg-zinc-800'
-              : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+              ? 'border-zinc-700 bg-zinc-800/80 text-zinc-200 hover:bg-zinc-800 active:bg-zinc-700'
+              : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 active:bg-gray-100'
           }`}
         >
-          <Upload className="w-4 h-4 text-gray-600 dark:text-zinc-400" />
-          <span>Export</span>
+          <Upload className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-600 dark:text-zinc-400" />
+          <span className="hidden xs:inline sm:inline">Export</span>
         </button>
 
         {/* Delete Button */}
         <button
+          type="button"
           id="delete-note-btn"
           onClick={onDelete}
-          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg border text-sm font-medium transition-colors shadow-2xs ${
+          title={`Delete "${title}"`}
+          className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-1.5 rounded-lg border text-xs sm:text-sm font-medium transition-all active:scale-95 shadow-2xs cursor-pointer ${
             darkMode
-              ? 'border-red-900/50 bg-red-950/20 text-red-400 hover:bg-red-950/40'
-              : 'border-[#FDA29B] bg-white text-[#D92D20] hover:bg-red-50/60'
+              ? 'border-red-900/50 bg-red-950/20 text-red-400 hover:bg-red-950/40 active:bg-red-950/60'
+              : 'border-[#FDA29B] bg-white text-[#D92D20] hover:bg-red-50/80 active:bg-red-100'
           }`}
         >
-          <Trash2 className="w-4 h-4 text-[#D92D20] dark:text-red-400" />
+          <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#D92D20] dark:text-red-400" />
           <span>Delete</span>
         </button>
       </div>

@@ -44,17 +44,20 @@
 }
 
 /* Rich text note editor typography and list indexing */
-#note-editor-content {
+#note-editor-content,
+.onenote-text-editor {
   font-size: 1rem;
   line-height: 1.65;
 }
 
-#note-editor-content p {
+#note-editor-content p,
+.onenote-text-editor p {
   margin-bottom: 0.5rem;
   min-height: 1.5rem;
 }
 
-#note-editor-content h1 {
+#note-editor-content h1,
+.onenote-text-editor h1 {
   font-size: 1.875rem;
   font-weight: 700;
   letter-spacing: -0.02em;
@@ -63,7 +66,8 @@
   color: #111827;
 }
 
-#note-editor-content h2 {
+#note-editor-content h2,
+.onenote-text-editor h2 {
   font-size: 1.5rem;
   font-weight: 600;
   letter-spacing: -0.015em;
@@ -72,7 +76,8 @@
   color: #111827;
 }
 
-#note-editor-content h3 {
+#note-editor-content h3,
+.onenote-text-editor h3 {
   font-size: 1.25rem;
   font-weight: 600;
   margin-top: 0.75rem;
@@ -85,11 +90,18 @@
 .dark #note-editor-content h3,
 [data-theme="dark"] #note-editor-content h1,
 [data-theme="dark"] #note-editor-content h2,
-[data-theme="dark"] #note-editor-content h3 {
+[data-theme="dark"] #note-editor-content h3,
+.dark .onenote-text-editor h1,
+.dark .onenote-text-editor h2,
+.dark .onenote-text-editor h3,
+[data-theme="dark"] .onenote-text-editor h1,
+[data-theme="dark"] .onenote-text-editor h2,
+[data-theme="dark"] .onenote-text-editor h3 {
   color: #f4f4f5;
 }
 
-#note-editor-content blockquote {
+#note-editor-content blockquote,
+.onenote-text-editor blockquote {
   border-left: 3px solid #7F56D9;
   padding-left: 1rem;
   margin: 0.75rem 0;
@@ -97,7 +109,8 @@
   opacity: 0.9;
 }
 
-#note-editor-content pre {
+#note-editor-content pre,
+.onenote-text-editor pre {
   background: rgba(0, 0, 0, 0.05);
   padding: 0.75rem 1rem;
   border-radius: 0.5rem;
@@ -106,47 +119,81 @@
   overflow-x: auto;
 }
 
-[data-theme="dark"] #note-editor-content pre {
+[data-theme="dark"] #note-editor-content pre,
+[data-theme="dark"] .onenote-text-editor pre {
   background: rgba(255, 255, 255, 0.08);
 }
 
 /* Bullet list (UL) indexing styles */
-#note-editor-content ul {
+#note-editor-content ul,
+.onenote-text-editor ul {
   list-style-position: outside;
   padding-left: 1.85rem;
   margin: 0.5rem 0;
 }
 
-#note-editor-content ul:not([style*="list-style-type"]) {
+#note-editor-content ul:not([style*="list-style-type"]),
+.onenote-text-editor ul:not([style*="list-style-type"]) {
   list-style-type: disc;
 }
 
-#note-editor-content ul li {
+#note-editor-content ul li,
+.onenote-text-editor ul li {
   margin-bottom: 0.3rem;
   padding-left: 0.25rem;
 }
 
 /* Numbered list (OL) indexing styles */
-#note-editor-content ol {
+#note-editor-content ol,
+.onenote-text-editor ol {
   list-style-position: outside;
   padding-left: 1.85rem;
   margin: 0.5rem 0;
 }
 
-#note-editor-content ol:not([style*="list-style-type"]) {
+#note-editor-content ol:not([style*="list-style-type"]),
+.onenote-text-editor ol:not([style*="list-style-type"]) {
   list-style-type: decimal;
 }
 
-#note-editor-content ol li {
+#note-editor-content ol li,
+.onenote-text-editor ol li {
   margin-bottom: 0.3rem;
   padding-left: 0.25rem;
 }
 
-#note-editor-content ol[style*="decimal-leading-zero"] {
+#note-editor-content ol[style*="decimal-leading-zero"],
+.onenote-text-editor ol[style*="decimal-leading-zero"] {
   padding-left: 2.2rem;
 }
 
-#note-editor-content ol[style*="upper-roman"] {
+#note-editor-content ol[style*="upper-roman"],
+.onenote-text-editor ol[style*="upper-roman"] {
   padding-left: 2.2rem;
+}
+
+/* Microsoft OneNote Paper Styles */
+.paper-ruled {
+  background-image: linear-gradient(to bottom, transparent 27px, rgba(127, 86, 217, 0.12) 28px);
+  background-size: 100% 28px;
+}
+.dark .paper-ruled,
+[data-theme="dark"] .paper-ruled {
+  background-image: linear-gradient(to bottom, transparent 27px, rgba(255, 255, 255, 0.07) 28px);
+  background-size: 100% 28px;
+}
+
+.paper-grid {
+  background-image: 
+    linear-gradient(to right, rgba(127, 86, 217, 0.1) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(127, 86, 217, 0.1) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+.dark .paper-grid,
+[data-theme="dark"] .paper-grid {
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+  background-size: 24px 24px;
 }
 

@@ -12,7 +12,8 @@ import { RecentView } from './components/RecentView';
 import { FavoritesView } from './components/FavoritesView';
 import { SettingsView } from './components/SettingsView';
 import { ExportModal } from './components/ExportModal';
-import { renderPdfPages, createSamplePdfData } from './utils/pdfLoader';
+import { ConfirmModal } from './components/ConfirmModal';
+import { renderPdfPages } from './utils/pdfLoader';
 import { saveNotesToStorage, loadNotesFromStorage } from './utils/storage';
 
 const INITIAL_NOTE: NoteItem = {
@@ -21,6 +22,16 @@ const INITIAL_NOTE: NoteItem = {
   subject: 'dbms',
   topic: 'Week 6',
   content: '<p><br></p>',
+  textBoxes: [
+    {
+      id: 'box_1',
+      x: 36,
+      y: 28,
+      width: 760,
+      content: '<p><br></p>',
+    },
+  ],
+  paperStyle: 'ruled',
   strokes: [],
   created: Date.now() - 3600000,
   updated: Date.now(),
@@ -43,6 +54,7 @@ export default function App() {
   // Navigation
   const [currentPage, setCurrentPage] = useState<NavPage>('notes');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [selectedSubjectForTopics, setSelectedSubjectForTopics] = useState<string | null>(null);
 
   // Settings
   const [settings, setSettings] = useState<AppSettings>(() => {
@@ -101,6 +113,24 @@ export default function App() {
   const [activeNoteId, setActiveNoteId] = useState<string>(INITIAL_NOTE.id);
   const [isSaved, setIsSaved] = useState<boolean>(true);
   const [isExportOpen, setIsExportOpen] = useState(false);
+
+  // Custom subjects list persisted in storage
+  const [customSubjects, setCustomSubjects] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('ns_custom_subjects');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('ns_custom_subjects', JSON.stringify(customSubjects));
+    } catch {
+      // ignore
+    }
+  }, [customSubjects]);
 
   // Drawing state
   const [isDrawingToolbarOpen, setIsDrawingToolbarOpen] = useState<boolean>(true);
@@ -175,12 +205,23 @@ export default function App() {
   const handleCreateNote = (presetSubject?: string, presetTopic?: string) => {
     const subject = presetSubject || (settings.rememberLastSubject ? settings.lastSubject : 'dbms');
     const topic = presetTopic || 'Week 6';
+    const noteId = `note_${Date.now()}`;
     const newNote: NoteItem = {
-      id: `note_${Date.now()}`,
+      id: noteId,
       title: 'Untitled note',
       subject,
       topic,
       content: '<p><br></p>',
+      textBoxes: [
+        {
+          id: `box_${Date.now()}`,
+          x: 36,
+          y: 28,
+          width: 760,
+          content: '<p><br></p>',
+        },
+      ],
+      paperStyle: 'ruled',
       strokes: [],
       created: Date.now(),
       updated: Date.now(),
@@ -195,12 +236,76 @@ export default function App() {
     redoStackRef.current = [];
   };
 
-  // Note deletion
-  const handleDeleteActiveNote = () => {
-    if (settings.confirmDelete && !window.confirm(`Delete "${activeNote.title}"?`)) {
-      return;
+  // Add a brand-new subject with initial note
+  const handleAddSubject = (subjectName: string, initialTopic: string = 'Introduction', openEditor: boolean = false) => {
+    const trimmed = subjectName.trim();
+    if (!trimmed) return;
+
+    if (!customSubjects.includes(trimmed)) {
+      setCustomSubjects((prev) => [...prev, trimmed]);
     }
 
+    const noteId = `note_${Date.now()}`;
+    const newNote: NoteItem = {
+      id: noteId,
+      title: `Intro to ${trimmed}`,
+      subject: trimmed,
+      topic: initialTopic.trim() || 'Introduction',
+      content: '<p><br></p>',
+      textBoxes: [
+        {
+          id: `box_${Date.now()}`,
+          x: 36,
+          y: 28,
+          width: 760,
+          content: '<p><br></p>',
+        },
+      ],
+      paperStyle: 'ruled',
+      strokes: [],
+      created: Date.now(),
+      updated: Date.now(),
+      favorite: false,
+      type: 'written',
+    };
+
+    setNotes((prev) => [newNote, ...prev]);
+    setActiveNoteId(newNote.id);
+    setSettings((s) => ({ ...s, lastSubject: trimmed }));
+    undoStackRef.current = [];
+    redoStackRef.current = [];
+
+    if (openEditor) {
+      setCurrentPage('notes');
+    } else {
+      setSelectedSubjectForTopics(trimmed);
+      setCurrentPage('subjects');
+    }
+  };
+
+  // In-app confirmation modal state (replaces window.confirm which fails in sandboxed iframes)
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    confirmVariant?: 'danger' | 'primary';
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmLabel: 'Delete',
+    confirmVariant: 'danger',
+    onConfirm: () => {},
+  });
+
+  const closeConfirmModal = () => {
+    setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+  };
+
+  // Note deletion
+  const executeDeleteActiveNote = () => {
     const remaining = notes.filter((n) => n.id !== activeNote.id);
     if (remaining.length === 0) {
       const fallback = { ...INITIAL_NOTE, id: `note_${Date.now()}`, title: 'New note' };
@@ -209,6 +314,22 @@ export default function App() {
     } else {
       setNotes(remaining);
       setActiveNoteId(remaining[0].id);
+    }
+    closeConfirmModal();
+  };
+
+  const handleDeleteActiveNote = () => {
+    if (settings.confirmDelete) {
+      setConfirmModal({
+        isOpen: true,
+        title: 'Delete Note',
+        message: `Are you sure you want to permanently delete "${activeNote.title || 'Untitled note'}"? This action cannot be undone.`,
+        confirmLabel: 'Delete Note',
+        confirmVariant: 'danger',
+        onConfirm: executeDeleteActiveNote,
+      });
+    } else {
+      executeDeleteActiveNote();
     }
   };
 
@@ -243,23 +364,196 @@ export default function App() {
     updateActiveNote({ strokes: next });
   };
 
+  const executeClearDrawing = () => {
+    undoStackRef.current.push([...activeNote.strokes]);
+    redoStackRef.current = [];
+    setStackTick((t) => t + 1);
+    updateActiveNote({ strokes: [] });
+    closeConfirmModal();
+  };
+
   const handleClearDrawing = () => {
     if (activeNote.strokes.length === 0) return;
-    if (window.confirm('Clear all drawing strokes on this note?')) {
-      undoStackRef.current.push([...activeNote.strokes]);
-      redoStackRef.current = [];
-      setStackTick((t) => t + 1);
-      updateActiveNote({ strokes: [] });
+    setConfirmModal({
+      isOpen: true,
+      title: 'Clear Ink Drawing',
+      message: 'Are you sure you want to clear all hand-drawn strokes on this note?',
+      confirmLabel: 'Clear Ink',
+      confirmVariant: 'danger',
+      onConfirm: executeClearDrawing,
+    });
+  };
+
+  // Track last active editor and user selection for resilient formatting (e.g. color picking)
+  const lastActiveEditorRef = useRef<HTMLElement | null>(null);
+  const savedSelectionRangeRef = useRef<Range | null>(null);
+  const [activeFontFamily, setActiveFontFamily] = useState<string>('Plus Jakarta Sans');
+  const [activeFontSize, setActiveFontSize] = useState<string>('16px');
+
+  useEffect(() => {
+    const handleSelectionChange = () => {
+      const sel = window.getSelection();
+      if (!sel || sel.rangeCount === 0) return;
+      const range = sel.getRangeAt(0);
+      let container: Node | null = range.commonAncestorContainer;
+      if (container.nodeType === Node.TEXT_NODE) {
+        container = container.parentNode;
+      }
+      if (container instanceof HTMLElement) {
+        const editor =
+          container.closest('.onenote-text-editor') ||
+          container.closest('#note-editor-content');
+        if (editor) {
+          lastActiveEditorRef.current = editor as HTMLElement;
+          savedSelectionRangeRef.current = range.cloneRange();
+
+          try {
+            const comp = window.getComputedStyle(container);
+            if (comp.fontFamily) {
+              setActiveFontFamily(comp.fontFamily);
+            }
+            if (comp.fontSize) {
+              setActiveFontSize(comp.fontSize);
+            }
+          } catch {
+            // ignore
+          }
+        }
+      }
+    };
+
+    document.addEventListener('selectionchange', handleSelectionChange);
+    return () => document.removeEventListener('selectionchange', handleSelectionChange);
+  }, []);
+
+  // Active editor finder for OneNote text boxes
+  const getActiveEditor = (): HTMLElement | null => {
+    const activeEl = document.activeElement;
+    if (
+      activeEl &&
+      (activeEl.classList.contains('onenote-text-editor') ||
+        activeEl.id === 'note-editor-content')
+    ) {
+      return activeEl as HTMLElement;
+    }
+    const parentEditor = activeEl?.closest('.onenote-text-editor') as HTMLElement;
+    if (parentEditor) return parentEditor;
+
+    if (lastActiveEditorRef.current && document.body.contains(lastActiveEditorRef.current)) {
+      return lastActiveEditorRef.current;
+    }
+
+    const all = document.querySelectorAll('.onenote-text-editor');
+    if (all.length > 0) return all[0] as HTMLElement;
+    return document.getElementById('note-editor-content');
+  };
+
+  const syncEditorChanges = () => {
+    const editor = getActiveEditor();
+    if (!editor) return;
+    const boxId = editor.getAttribute('data-box-id');
+    if (boxId && activeNote.textBoxes && activeNote.textBoxes.length > 0) {
+      const updated = activeNote.textBoxes.map((b) =>
+        b.id === boxId ? { ...b, content: editor.innerHTML } : b
+      );
+      updateActiveNote({
+        textBoxes: updated,
+        content: updated.map((b) => b.content).join('<hr/>'),
+      });
+    } else {
+      updateActiveNote({ content: editor.innerHTML });
     }
   };
 
   // Formatting commands for rich text
   const handleFormat = (command: string, value?: string) => {
-    document.execCommand(command, false, value);
-    const editor = document.getElementById('note-editor-content');
+    const editor = getActiveEditor();
     if (editor) {
-      updateActiveNote({ content: editor.innerHTML });
+      editor.focus();
+      const sel = window.getSelection();
+      if (savedSelectionRangeRef.current && sel) {
+        try {
+          sel.removeAllRanges();
+          sel.addRange(savedSelectionRangeRef.current);
+        } catch {
+          // ignore
+        }
+      }
     }
+
+    try {
+      document.execCommand('styleWithCSS', false, 'true');
+    } catch {
+      // ignore
+    }
+
+    if (command === 'fontName' && value) {
+      setActiveFontFamily(value);
+      const sel = window.getSelection();
+      const hasSelection = sel && !sel.isCollapsed && sel.toString().length > 0;
+      if (hasSelection) {
+        document.execCommand('fontName', false, value);
+      } else if (editor) {
+        document.execCommand('fontName', false, value);
+        editor.style.fontFamily = value;
+        const boxId = editor.getAttribute('data-box-id');
+        if (boxId && activeNote.textBoxes) {
+          const updated = activeNote.textBoxes.map((b) =>
+            b.id === boxId ? { ...b, fontFamily: value } : b
+          );
+          updateActiveNote({ textBoxes: updated });
+        }
+      }
+    } else if (command === 'fontSize' && value) {
+      setActiveFontSize(value);
+      const sel = window.getSelection();
+      const hasSelection = sel && !sel.isCollapsed && sel.toString().length > 0;
+      if (hasSelection && editor) {
+        document.execCommand('fontSize', false, '7');
+        const fonts = editor.querySelectorAll('font[size="7"]');
+        fonts.forEach((f) => {
+          f.removeAttribute('size');
+          (f as HTMLElement).style.fontSize = value;
+        });
+        const spans = editor.querySelectorAll('span');
+        spans.forEach((s) => {
+          if (
+            s.style.fontSize === 'xxx-large' ||
+            s.style.fontSize === '-webkit-xxx-large' ||
+            s.style.fontSize === '48px'
+          ) {
+            s.style.fontSize = value;
+          }
+        });
+      } else if (editor) {
+        editor.style.fontSize = value;
+        const boxId = editor.getAttribute('data-box-id');
+        if (boxId && activeNote.textBoxes) {
+          const updated = activeNote.textBoxes.map((b) =>
+            b.id === boxId ? { ...b, fontSize: value } : b
+          );
+          updateActiveNote({ textBoxes: updated });
+        }
+      }
+    } else if (command === 'foreColor' && (value === 'inherit' || value === 'default')) {
+      const defaultColor = darkMode ? '#f4f4f5' : '#111827';
+      document.execCommand('foreColor', false, defaultColor);
+    } else if (command === 'hiliteColor' && (value === 'transparent' || value === 'none')) {
+      try {
+        document.execCommand('hiliteColor', false, 'transparent');
+      } catch {
+        document.execCommand('backColor', false, 'transparent');
+      }
+    } else if (command === 'hiliteColor') {
+      try {
+        document.execCommand('hiliteColor', false, value);
+      } catch {
+        document.execCommand('backColor', false, value);
+      }
+    } else {
+      document.execCommand(command, false, value);
+    }
+    syncEditorChanges();
   };
 
   // List style indexing options handler
@@ -267,7 +561,7 @@ export default function App() {
     command: 'insertOrderedList' | 'insertUnorderedList',
     styleType?: string
   ) => {
-    const editor = document.getElementById('note-editor-content');
+    const editor = getActiveEditor();
     if (!editor) return;
 
     editor.focus();
@@ -311,28 +605,26 @@ export default function App() {
       }
     }
 
-    updateActiveNote({ content: editor.innerHTML });
+    syncEditorChanges();
   };
 
   const handleInsertChecklist = () => {
+    const editor = getActiveEditor();
+    if (editor) editor.focus();
     const html = `<div class="check-item flex items-center gap-2 my-1.5"><input type="checkbox" class="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500 cursor-pointer" /><span contenteditable="true" class="outline-none">Checklist item</span></div><p><br></p>`;
     document.execCommand('insertHTML', false, html);
-    const editor = document.getElementById('note-editor-content');
-    if (editor) {
-      updateActiveNote({ content: editor.innerHTML });
-    }
+    syncEditorChanges();
   };
 
   const handleInsertImageFile = (file: File) => {
     const reader = new FileReader();
     reader.onload = () => {
+      const editor = getActiveEditor();
+      if (editor) editor.focus();
       const dataUrl = reader.result as string;
       const html = `<img src="${dataUrl}" alt="Inserted image" class="note-image max-w-full rounded-xl my-3 cursor-pointer shadow-xs" style="width: 100%; height: auto;" /><p><br></p>`;
       document.execCommand('insertHTML', false, html);
-      const editor = document.getElementById('note-editor-content');
-      if (editor) {
-        updateActiveNote({ content: editor.innerHTML });
-      }
+      syncEditorChanges();
     };
     reader.readAsDataURL(file);
   };
@@ -340,7 +632,7 @@ export default function App() {
   const handlePasteImage = async () => {
     try {
       if (!navigator.clipboard?.read) {
-        alert('Click inside the document and press Ctrl+V (or ⌘V) to paste an image.');
+        alert('Click inside a note box and press Ctrl+V (or ⌘V) to paste an image.');
         return;
       }
       const items = await navigator.clipboard.read();
@@ -352,13 +644,12 @@ export default function App() {
           const blob = await item.getType(imageType);
           const reader = new FileReader();
           reader.onload = () => {
+            const editor = getActiveEditor();
+            if (editor) editor.focus();
             const dataUrl = reader.result as string;
             const html = `<img src="${dataUrl}" alt="Pasted image" class="note-image max-w-full rounded-xl my-3 cursor-pointer shadow-xs" style="width: 100%; height: auto;" /><p><br></p>`;
             document.execCommand('insertHTML', false, html);
-            const editor = document.getElementById('note-editor-content');
-            if (editor) {
-              updateActiveNote({ content: editor.innerHTML });
-            }
+            syncEditorChanges();
           };
           reader.readAsDataURL(blob);
           break;
@@ -385,16 +676,14 @@ export default function App() {
     }
   };
 
-  const handleInsertSamplePdf = () => {
-    const pdfData = createSamplePdfData();
-    updateActiveNote({ pdfData });
-    setIsSaved(false);
-    setTimeout(() => setIsSaved(true), 500);
-  };
-
   // Collect unique subjects and topics for pickers
-  const allSubjects = Array.from(new Set(notes.map((n) => n.subject).filter(Boolean))).sort();
-  if (!allSubjects.includes('dbms')) allSubjects.unshift('dbms');
+  const allSubjects = Array.from(
+    new Set([
+      ...notes.map((n) => n.subject).filter(Boolean),
+      ...customSubjects,
+      'dbms',
+    ])
+  ).sort();
 
   const allTopicsForSubject = Array.from(
     new Set(
@@ -415,7 +704,12 @@ export default function App() {
       {/* Left Sidebar */}
       <Sidebar
         currentPage={currentPage}
-        onSelectPage={(page) => setCurrentPage(page)}
+        onSelectPage={(page) => {
+          if (page === 'subjects') {
+            setSelectedSubjectForTopics(null);
+          }
+          setCurrentPage(page);
+        }}
         collapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
         darkMode={darkMode}
@@ -446,6 +740,9 @@ export default function App() {
               onSubjectChange={(newSubject) => {
                 updateActiveNote({ subject: newSubject });
                 setSettings((s) => ({ ...s, lastSubject: newSubject }));
+                if (!customSubjects.includes(newSubject)) {
+                  setCustomSubjects((prev) => [...prev, newSubject]);
+                }
               }}
               onTopicChange={(newTopic) => updateActiveNote({ topic: newTopic })}
               darkMode={darkMode}
@@ -460,11 +757,14 @@ export default function App() {
                 onInsertImageFile={handleInsertImageFile}
                 onPasteImage={handlePasteImage}
                 onInsertPdfFile={handleInsertPdfFile}
-                onInsertSamplePdf={handleInsertSamplePdf}
                 hasPdf={Boolean(activeNote.pdfData && activeNote.pdfData.pages.length > 0)}
+                paperStyle={activeNote.paperStyle || 'ruled'}
+                onPaperStyleChange={(paperStyle) => updateActiveNote({ paperStyle })}
                 drawingOpen={isDrawingToolbarOpen}
                 onToggleDrawing={() => setIsDrawingToolbarOpen(!isDrawingToolbarOpen)}
                 darkMode={darkMode}
+                activeFontFamily={activeFontFamily}
+                activeFontSize={activeFontSize}
               />
             </div>
 
@@ -498,8 +798,18 @@ export default function App() {
               }`}
             >
               <NoteCanvas
+                key={activeNote.id}
                 contentHtml={activeNote.content}
                 onContentChange={(html) => updateActiveNote({ content: html })}
+                textBoxes={activeNote.textBoxes}
+                onTextBoxesChange={(boxes) =>
+                  updateActiveNote({
+                    textBoxes: boxes,
+                    content: boxes.map((b) => b.content).join('<hr/>'),
+                  })
+                }
+                paperStyle={activeNote.paperStyle || 'ruled'}
+                onPaperStyleChange={(paperStyle) => updateActiveNote({ paperStyle })}
                 strokes={activeNote.strokes}
                 onStrokesChange={handleStrokesChange}
                 isDrawingMode={isDrawingToolbarOpen}
@@ -523,6 +833,10 @@ export default function App() {
               setActiveNoteId(id);
               setCurrentPage('notes');
             }}
+            onViewSubject={(sub) => {
+              setSelectedSubjectForTopics(sub);
+              setCurrentPage('subjects');
+            }}
             onCreateNote={handleCreateNote}
             darkMode={darkMode}
           />
@@ -536,6 +850,10 @@ export default function App() {
               setCurrentPage('notes');
             }}
             onCreateNote={handleCreateNote}
+            onAddSubject={handleAddSubject}
+            customSubjects={customSubjects}
+            initialSubject={selectedSubjectForTopics}
+            onClearInitialSubject={() => setSelectedSubjectForTopics(null)}
             darkMode={darkMode}
           />
         )}
@@ -574,11 +892,20 @@ export default function App() {
               if (imported[0]) setActiveNoteId(imported[0].id);
             }}
             onDeleteAllNotes={() => {
-              if (window.confirm('Are you absolutely sure? This will delete ALL notes!')) {
-                const fresh = [{ ...INITIAL_NOTE, id: `note_${Date.now()}` }];
-                setNotes(fresh);
-                setActiveNoteId(fresh[0].id);
-              }
+              setConfirmModal({
+                isOpen: true,
+                title: 'Delete All Notes',
+                message:
+                  'Are you absolutely sure? This will permanently erase ALL notes in your notebook. This action cannot be undone.',
+                confirmLabel: 'Delete Everything',
+                confirmVariant: 'danger',
+                onConfirm: () => {
+                  const fresh = [{ ...INITIAL_NOTE, id: `note_${Date.now()}` }];
+                  setNotes(fresh);
+                  setActiveNoteId(fresh[0].id);
+                  closeConfirmModal();
+                },
+              });
             }}
             darkMode={darkMode}
             onToggleDarkMode={toggleDarkMode}
@@ -591,6 +918,18 @@ export default function App() {
         note={activeNote}
         isOpen={isExportOpen}
         onClose={() => setIsExportOpen(false)}
+        darkMode={darkMode}
+      />
+
+      {/* Universal In-App Confirmation Modal (Safe in iFrames and on all devices) */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmLabel={confirmModal.confirmLabel}
+        confirmVariant={confirmModal.confirmVariant}
+        onConfirm={confirmModal.onConfirm}
+        onCancel={closeConfirmModal}
         darkMode={darkMode}
       />
     </div>

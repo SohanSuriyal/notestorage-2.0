@@ -32,12 +32,26 @@ export interface PdfDocumentData {
   uploadedAt?: number;
 }
 
+export interface NoteTextBox {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  content: string; // rich text HTML
+  fontFamily?: string;
+  fontSize?: string;
+}
+
+export type PaperStyle = 'blank' | 'ruled' | 'grid';
+
 export interface NoteItem {
   id: string;
   title: string;
   subject: string;
   topic: string;
   content: string; // rich text HTML or free text
+  textBoxes?: NoteTextBox[];
+  paperStyle?: PaperStyle;
   strokes: DrawingStroke[];
   created: number;
   updated: number;
