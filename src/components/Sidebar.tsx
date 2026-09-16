@@ -61,7 +61,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           : 'bg-white border-[#EAECF0] text-gray-700'
       } ${collapsed ? 'w-[70px] px-2' : 'w-[230px] px-3.5'} ${compact ? 'py-3' : 'py-5'} flex-shrink-0 min-h-screen`}
     >
-      {/* Brand Header */}
       <div className={`relative flex items-center justify-center ${compact ? 'mb-4 min-h-[40px]' : 'mb-7 min-h-[64px]'}`}>
         {branding.dataUrl ? (
           <img
@@ -94,7 +93,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
       </div>
 
-      {/* Navigation List */}
       <nav className="flex flex-col gap-1">
         {navItems.map((item) => {
           const Icon = item.icon;
@@ -134,12 +132,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
         })}
       </nav>
 
-      {/* Logo & Branding is available only while Settings is open. */}
       {currentPage === 'settings' && !collapsed && (
         <button
           id="settings-branding-option"
           onClick={() => setShowBrandingSettings(true)}
-          className={`fixed z-30 left-[max(250px,calc(50%_-_270px))] top-[350px] w-[225px] flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold text-left transition-colors ${
+          className={`fixed z-30 left-[max(250px,calc(50%_-_270px))] top-[410px] w-[225px] flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold text-left transition-colors ${
             darkMode
               ? 'text-zinc-400 hover:bg-zinc-800/80 hover:text-zinc-200'
               : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
@@ -150,7 +147,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
       )}
 
-      {/* Bottom Actions */}
       <div className="mt-auto pt-4 border-t border-gray-100 dark:border-zinc-800 space-y-2">
         {!collapsed && (
           <div className="px-1">
