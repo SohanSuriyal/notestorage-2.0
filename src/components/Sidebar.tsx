@@ -139,7 +139,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <button
           id="settings-branding-option"
           onClick={() => setShowBrandingSettings(true)}
-          className={`fixed z-30 left-[max(250px,calc(50%_-_270px))] top-[380px] w-[225px] flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold text-left transition-colors ${
+          className={`fixed z-30 left-[max(250px,calc(50%_-_270px))] top-[350px] w-[225px] flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold text-left transition-colors ${
             darkMode
               ? 'text-zinc-400 hover:bg-zinc-800/80 hover:text-zinc-200'
               : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
