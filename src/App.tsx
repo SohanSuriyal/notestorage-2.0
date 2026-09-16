@@ -15,7 +15,7 @@ import { SettingsView } from './components/SettingsView';
 import { ExportModal } from './components/ExportModal';
 import { ConfirmModal } from './components/ConfirmModal';
 import { renderPdfPages } from './utils/pdfLoader';
-import { saveNotesToStorage, loadNotesFromStorage } from './utils/storage';
+import { saveNotesToStorage, loadNotesFromStorage, loadNoteFromStorage } from './utils/storage';
 
 const INITIAL_NOTE: NoteItem = {
   id: 'note_1',
@@ -75,16 +75,8 @@ export default function App() {
   });
 
   // Notes state
+  // Keep only lightweight note metadata/content in React state. Heavy attachments are loaded on demand.
   const [notes, setNotes] = useState<NoteItem[]>(() => {
-    try {
-      const saved = localStorage.getItem('ns_notes');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch {
-      // ignore
-    }
     return [
       INITIAL_NOTE,
       {
@@ -155,16 +147,45 @@ export default function App() {
 
   const activeNote = notes.find((n) => n.id === activeNoteId) || notes[0] || INITIAL_NOTE;
 
-  // Load notes on mount from IndexedDB (with localStorage fallback)
+  // Load lightweight note metadata only on startup. Attachments are intentionally not loaded here.
   useEffect(() => {
     loadNotesFromStorage().then((saved) => {
       if (saved && saved.length > 0) {
         setNotes(saved);
+        setActiveNoteId((currentId) => saved.some((n) => n.id === currentId) ? currentId : saved[0].id);
       }
     });
   }, []);
 
-  // Persist notes using IndexedDB (for large PDF data) & settings to localStorage
+  // Load heavy PDF/image data only when the selected note changes.
+  useEffect(() => {
+    let cancelled = false;
+
+    loadNoteFromStorage(activeNote.id).then((fullNote) => {
+      if (cancelled || !fullNote) return;
+
+      const hasAttachment = Boolean(fullNote.pdfData || fullNote.fileDataUrl);
+      if (!hasAttachment) return;
+
+      setNotes((prev) =>
+        prev.map((note) =>
+          note.id === fullNote.id
+            ? {
+                ...note,
+                pdfData: fullNote.pdfData,
+                fileDataUrl: fullNote.fileDataUrl,
+              }
+            : note
+        )
+      );
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeNote.id]);
+
+  // Persist notes using incremental IndexedDB writes.
   useEffect(() => {
     saveNotesToStorage(notes);
   }, [notes]);
@@ -217,19 +238,16 @@ export default function App() {
       )
     );
 
-    // If a timer was already waiting to mark as saved, clear it
     if (markSavedTimerRef.current) {
       clearTimeout(markSavedTimerRef.current);
     }
 
-    // Only transition indicator to 'Saving...' after user pauses slightly (prevents flicker on continuous drawing)
     if (!saveDebounceTimerRef.current) {
       saveDebounceTimerRef.current = setTimeout(() => {
         setIsSaved(false);
       }, 500);
     }
 
-    // Reset mark-as-saved delay: stays quiet and clean until 1.2s after drawing/typing finishes
     markSavedTimerRef.current = setTimeout(() => {
       if (saveDebounceTimerRef.current) {
         clearTimeout(saveDebounceTimerRef.current);
