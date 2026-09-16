@@ -60,7 +60,6 @@ const OneNoteTextBoxView: React.FC<OneNoteTextBoxViewProps> = ({
   const fontClass =
     editorFont === 'serif' ? 'font-serif' : editorFont === 'mono' ? 'font-mono' : 'font-sans';
 
-  // Initialize and synchronize innerHTML when box.content updates externally without destroying caret on typing
   useEffect(() => {
     const el = editorRef.current;
     if (!el) return;
@@ -71,7 +70,6 @@ const OneNoteTextBoxView: React.FC<OneNoteTextBoxViewProps> = ({
       return;
     }
 
-    // Only update innerHTML if it's NOT the active element and content actually differs
     if (document.activeElement !== el && el.innerHTML !== box.content) {
       el.innerHTML = box.content;
     }
@@ -95,7 +93,6 @@ const OneNoteTextBoxView: React.FC<OneNoteTextBoxViewProps> = ({
       }}
       onClick={onClickContainer}
     >
-      {/* OneNote Container Top Drag Handle (visible on hover or when active) */}
       <div
         onMouseDown={onStartDrag}
         title="Drag to move this note container anywhere"
@@ -112,7 +109,6 @@ const OneNoteTextBoxView: React.FC<OneNoteTextBoxViewProps> = ({
           </span>
         </div>
 
-        {/* Delete container button */}
         <button
           type="button"
           onClick={(e) => {
@@ -126,7 +122,6 @@ const OneNoteTextBoxView: React.FC<OneNoteTextBoxViewProps> = ({
         </button>
       </div>
 
-      {/* ContentEditable Text Area */}
       <div
         ref={editorRef}
         id={`textbox_content_${box.id}`}
@@ -144,7 +139,6 @@ const OneNoteTextBoxView: React.FC<OneNoteTextBoxViewProps> = ({
         } ${darkMode ? 'text-zinc-100' : 'text-gray-900'}`}
       />
 
-      {/* Right Edge Horizontal Resizer */}
       <div
         onMouseDown={onStartResize}
         title="Drag to resize box width"
@@ -156,7 +150,6 @@ const OneNoteTextBoxView: React.FC<OneNoteTextBoxViewProps> = ({
   );
 };
 
-// Helper to convert perfect-freehand outline points [x, y] to SVG path / Canvas Path2D
 function getSvgPathFromStroke(strokeOutline: number[][]): Path2D {
   const path = new Path2D();
   if (strokeOutline.length < 2) return path;
@@ -173,14 +166,12 @@ function getSvgPathFromStroke(strokeOutline: number[][]): Path2D {
   return path;
 }
 
-// Distance-based point simplifier to eliminate hand tremor jitter
 function filterJitterPoints(pts: DrawingPoint[]): DrawingPoint[] {
   if (pts.length <= 2) return pts;
   const result: DrawingPoint[] = [pts[0]];
   for (let i = 1; i < pts.length; i++) {
     const prev = result[result.length - 1];
     const cur = pts[i];
-    // Filter out micro-tremor points closer than 1.5px unless it is the last point
     if (Math.hypot(cur.x - prev.x, cur.y - prev.y) >= 1.5 || i === pts.length - 1) {
       result.push(cur);
     }
@@ -188,12 +179,10 @@ function filterJitterPoints(pts: DrawingPoint[]): DrawingPoint[] {
   return result;
 }
 
-// Render a stroke with studio-grade smoothness onto a 2D canvas context
 function renderStrokeToContext(ctx: CanvasRenderingContext2D, stroke: DrawingStroke) {
   if (!stroke.points || stroke.points.length === 0) return;
 
   const rawPts = stroke.points;
-  const isPen = stroke.tool === 'pen';
   const isHighlighter = stroke.tool === 'highlighter';
 
   ctx.save();
@@ -226,7 +215,6 @@ function renderStrokeToContext(ctx: CanvasRenderingContext2D, stroke: DrawingStr
     return;
   }
 
-  // Pen Tool: Production-grade handwriting synthesis via perfect-freehand
   ctx.globalCompositeOperation = 'source-over';
   ctx.fillStyle = stroke.color;
   ctx.globalAlpha = 1.0;
@@ -240,7 +228,6 @@ function renderStrokeToContext(ctx: CanvasRenderingContext2D, stroke: DrawingStr
     return;
   }
 
-  // Filter jitter points to ensure silky smooth curves
   const cleanPts = filterJitterPoints(rawPts);
   const inputPoints = cleanPts.map((p) => [p.x, p.y, p.pressure ?? 0.5]);
 
@@ -257,7 +244,6 @@ function renderStrokeToContext(ctx: CanvasRenderingContext2D, stroke: DrawingStr
     const path = getSvgPathFromStroke(outline);
     ctx.fill(path);
   } else {
-    // Fallback smooth bezier
     ctx.strokeStyle = stroke.color;
     ctx.lineWidth = stroke.size;
     ctx.lineCap = 'round';
@@ -321,11 +307,9 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Drawing state
   const [isPointerDown, setIsPointerDown] = useState(false);
   const currentStrokeRef = useRef<DrawingStroke | null>(null);
 
-  // PDF Viewer state
   const [pdfZoom, setPdfZoom] = useState<number>(100);
   const [isDraggingOver, setIsDraggingOver] = useState<boolean>(false);
   const [isLoadingPdf, setIsLoadingPdf] = useState<boolean>(false);
@@ -335,8 +319,6 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
   const [pageDeleteConfirm, setPageDeleteConfirm] = useState<number | null>(null);
   const [dismissedPdfPrompt, setDismissedPdfPrompt] = useState(false);
 
-  // OneNote Text Containers State
-  // Default to a primary box if none exist
   const getInitialBoxes = (): NoteTextBox[] => {
     if (propTextBoxes && propTextBoxes.length > 0) {
       return propTextBoxes;
@@ -360,7 +342,6 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
   const [draggedBoxId, setDraggedBoxId] = useState<string | null>(null);
   const [resizingBoxId, setResizingBoxId] = useState<string | null>(null);
 
-  // Sync external changes to textBoxes prop
   useEffect(() => {
     if (propTextBoxes && propTextBoxes.length > 0) {
       setBoxes(propTextBoxes);
@@ -370,7 +351,6 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
 
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Safely sync back to parent asynchronously to avoid any setState during render
   const syncBoxes = useCallback(
     (newBoxes: NoteTextBox[]) => {
       setBoxes(newBoxes);
@@ -399,7 +379,6 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
     };
   }, []);
 
-  // Close menus when clicking outside
   useEffect(() => {
     const handleGlobalClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
@@ -411,7 +390,6 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
     return () => document.removeEventListener('mousedown', handleGlobalClick);
   }, []);
 
-  // Redraw all strokes onto drawing canvas
   const redrawAllStrokes = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -426,7 +404,6 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
     });
   }, [strokes]);
 
-  // Compute minimum canvas height so scrolling and canvas expand to fit all boxes and PDF
   const wrapperMinHeight = useMemo(() => {
     let maxY = 1400;
     boxes.forEach((b) => {
@@ -439,13 +416,11 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
     return maxY;
   }, [boxes, pdfData, pdfZoom]);
 
-  // Resize canvas to match the content wrapper dimensions
   const updateCanvasDimensions = useCallback(() => {
     const wrapper = contentWrapperRef.current;
     const canvas = canvasRef.current;
     if (!wrapper || !canvas) return;
 
-    // Calculate maximum extent based on boxes, PDF pages, and wrapper height
     let maxY = Math.max(wrapper.scrollHeight, wrapper.clientHeight, 1400);
     boxes.forEach((b) => {
       if (b.y + 400 > maxY) maxY = b.y + 400;
@@ -488,14 +463,11 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
     redrawAllStrokes();
   }, [strokes, redrawAllStrokes]);
 
-  // ==================== ONE-NOTE "WRITE ANYWHERE" CLICK HANDLER ====================
   const handleWrapperClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    // If in drawing mode, the canvas handles pointer events
     if (isDrawingMode) return;
 
     const target = e.target as HTMLElement;
 
-    // If clicked on an existing box, button, input, select, or marked control, ignore
     if (
       target.closest('.onenote-box-container') ||
       target.closest('button') ||
@@ -513,7 +485,6 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
     const clickX = Math.round(e.clientX - rect.left);
     const clickY = Math.round(e.clientY - rect.top);
 
-    // Filter out previous empty boxes (boxes with no typed text, no images, and no checkboxes)
     const cleanedBoxes = boxesRef.current.filter((b) => {
       const hasImage = b.content.includes('<img');
       const hasCheckbox = b.content.includes('type="checkbox"');
@@ -521,8 +492,6 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
       return hasImage || hasCheckbox || textOnly.length > 0;
     });
 
-    // Align the new box so the text caret lands precisely under the click position:
-    // OneNoteTextBoxView has a 20px top drag handle + ~6px font baseline offset, and 10px left padding
     const desiredX = Math.max(16, clickX - 10);
     const desiredY = Math.max(16, clickY - 26);
 
@@ -543,7 +512,6 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
     syncBoxes(nextBoxes);
     setActiveBoxId(newId);
 
-    // Focus the newly created box and position caret inside
     setTimeout(() => {
       const editorEl = document.getElementById(`textbox_content_${newId}`);
       if (editorEl) {
@@ -558,7 +526,6 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
     }, 40);
   };
 
-  // Dragging a text container
   const handleStartDragBox = (boxId: string, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -590,8 +557,6 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
       setDraggedBoxId(null);
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
-
-      // Persist final position safely using boxesRef.current
       syncBoxes(boxesRef.current);
     };
 
@@ -599,7 +564,6 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
     window.addEventListener('mouseup', onMouseUp);
   };
 
-  // Resizing a text container horizontally
   const handleStartResizeBox = (boxId: string, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -624,8 +588,6 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
       setResizingBoxId(null);
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
-
-      // Persist final dimensions safely using boxesRef.current
       syncBoxes(boxesRef.current);
     };
 
@@ -633,24 +595,13 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
     window.addEventListener('mouseup', onMouseUp);
   };
 
-  // Delete a specific text container
+  // Delete a specific text container. The canvas is allowed to have zero text boxes.
   const handleDeleteBox = (boxId: string) => {
     const remaining = boxes.filter((b) => b.id !== boxId);
-    if (remaining.length === 0) {
-      // Keep at least one box ready to type
-      remaining.push({
-        id: `box_${Date.now()}`,
-        x: 36,
-        y: 28,
-        width: 760,
-        content: '<p><br></p>',
-      });
-    }
     syncBoxes(remaining);
-    setActiveBoxId(remaining[0].id);
+    setActiveBoxId(null);
   };
 
-  // Update content of a box
   const handleBoxInput = (boxId: string, newHtml: string) => {
     const updated = boxesRef.current.map((b) => (b.id === boxId ? { ...b, content: newHtml } : b));
     setBoxes(updated);
@@ -669,7 +620,6 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
     }, 120);
   };
 
-  // Toggle checklist checkbox inside any box
   const handleBoxClick = (boxId: string, e: React.MouseEvent) => {
     setActiveBoxId(boxId);
     const target = e.target as HTMLElement;
@@ -683,7 +633,6 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
     }
   };
 
-  // ==================== DRAWING POINTER HANDLERS ====================
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!isDrawingMode) return;
     const canvas = canvasRef.current;
@@ -744,7 +693,6 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
     if (!currentStrokeRef.current) return;
     const stroke = currentStrokeRef.current;
 
-    // Support coalesced raw events when available for high-rate stylus / apple pencil / mouse sampling
     const rawEvents = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : [e];
 
     rawEvents.forEach((ev) => {
@@ -783,7 +731,6 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
       return;
     }
 
-    // Pen Tool: Clear canvas and re-render all committed strokes + active stroke with perfect-freehand outline
     const dpr = window.devicePixelRatio || 1;
     ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr);
 
@@ -874,7 +821,6 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
     }
   };
 
-  // ==================== PDF PROCESSING & TWO-OPTION DELETION ====================
   const processPdfFile = async (file: File) => {
     try {
       setIsLoadingPdf(true);
@@ -894,21 +840,18 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
     }
   };
 
-  // Option 1: Delete a single selected page
   const handleDeleteSinglePdfPage = (pageNumberToDelete: number) => {
     if (!pdfData) return;
 
     const remainingPages = pdfData.pages.filter((p) => p.pageNumber !== pageNumberToDelete);
 
     if (remainingPages.length === 0) {
-      // If all pages removed, clear the PDF document
       if (onPdfDataChange) onPdfDataChange(undefined);
       setShowPdfDeleteMenu(false);
       setPageDeleteConfirm(null);
       return;
     }
 
-    // Re-index remaining pages
     const reindexed = remainingPages.map((p, idx) => ({
       ...p,
       pageNumber: idx + 1,
@@ -928,7 +871,6 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
     setSelectedPdfPageToDelete((prev) => Math.min(prev, reindexed.length));
   };
 
-  // Option 2: Delete all pages (remove PDF completely)
   const handleDeleteAllPdfPages = () => {
     if (onPdfDataChange) {
       onPdfDataChange(undefined);
@@ -937,7 +879,6 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
     setPageDeleteConfirm(null);
   };
 
-  // Drag & Drop handlers for embedding PDF
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     if (e.dataTransfer.types.includes('Files')) {
@@ -961,7 +902,6 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
     }
   };
 
-  // Paper Style Background Class
   const paperClass =
     paperStyle === 'ruled'
       ? 'paper-ruled'
@@ -979,7 +919,6 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
         darkMode ? 'bg-[#18181b] text-zinc-100' : 'bg-white text-gray-900'
       }`}
     >
-      {/* Drag & Drop Visual Overlay */}
       {isDraggingOver && (
         <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-purple-500/15 dark:bg-purple-950/60 backdrop-blur-xs border-2 border-dashed border-purple-500 rounded-2xl pointer-events-none m-3">
           <div className="p-4 rounded-full bg-purple-100 dark:bg-purple-900/60 text-purple-600 dark:text-purple-300 mb-2 animate-bounce">
@@ -994,7 +933,6 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
         </div>
       )}
 
-      {/* PDF Loading State */}
       {isLoadingPdf && (
         <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/85 dark:bg-zinc-900/85 backdrop-blur-xs">
           <div className="w-12 h-12 border-4 border-purple-200 dark:border-zinc-700 border-t-purple-600 rounded-full animate-spin mb-3" />
@@ -1009,7 +947,6 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
         </div>
       )}
 
-      {/* Main Expansive Content Area (Click anywhere to add OneNote container) */}
       <div
         ref={contentWrapperRef}
         id="note-page-content-wrapper"
@@ -1019,10 +956,8 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
         className={`relative w-full p-6 cursor-text select-text ${paperClass}`}
         title={!isDrawingMode ? 'Click anywhere on the page to start writing' : undefined}
       >
-        {/* PDF Document Section (If PDF is attached) */}
         {pdfData && pdfData.pages.length > 0 && (
           <div className="pdf-container relative z-10 max-w-4xl mx-auto mb-10 select-none">
-            {/* PDF Header Controls */}
             <div
               className={`pdf-header-controls no-create-box flex flex-col sm:flex-row sm:items-center justify-between p-3.5 mb-5 rounded-2xl border transition-colors shadow-2xs gap-3 ${
                 darkMode
@@ -1051,7 +986,6 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
               </div>
 
               <div className="flex items-center gap-2 flex-shrink-0">
-                {/* Draw on PDF toggle */}
                 <button
                   type="button"
                   onClick={() => onToggleDrawing && onToggleDrawing()}
@@ -1067,7 +1001,6 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
                   <span>{isDrawingMode ? 'Drawing Active' : 'Draw on PDF'}</span>
                 </button>
 
-                {/* PDF Zoom Controls */}
                 <div className="flex items-center rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 p-0.5">
                   <button
                     type="button"
@@ -1090,7 +1023,6 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
                   </button>
                 </div>
 
-                {/* PDF DELETE OPTIONS MENU: (1) Delete Selected Page, (2) Delete All Pages */}
                 <div className="relative inline-block" id="pdf-delete-menu-container">
                   <button
                     id="pdf-delete-options-trigger"
@@ -1115,7 +1047,6 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
                         Delete PDF Options
                       </div>
 
-                      {/* Option 1: Delete One Selected Page */}
                       <div className="p-2 rounded-xl bg-gray-50 dark:bg-zinc-700/50 mb-2.5">
                         <div className="text-xs font-semibold text-gray-800 dark:text-zinc-200 mb-1.5 flex items-center justify-between">
                           <span>Delete Selected Page</span>
@@ -1143,7 +1074,6 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
                         </div>
                       </div>
 
-                      {/* Option 2: Delete All Pages */}
                       <button
                         type="button"
                         onClick={handleDeleteAllPdfPages}
@@ -1168,7 +1098,6 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
               </div>
             </div>
 
-            {/* PDF Pages Stack with Per-Page Quick Delete */}
             <div className="pdf-pages-stack flex flex-col items-center gap-6">
               {pdfData.pages.map((page) => (
                 <div
@@ -1183,13 +1112,11 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
                     draggable={false}
                   />
 
-                  {/* Top Bar with Page Number & Individual Delete Button */}
                   <div className="absolute top-3 right-3 flex items-center gap-1.5 z-10">
                     <span className="px-2.5 py-1 rounded-md bg-black/70 backdrop-blur-xs text-white text-[11px] font-medium shadow-xs">
                       Page {page.pageNumber} of {pdfData.totalPages}
                     </span>
 
-                    {/* Per-Page Delete Button */}
                     {pageDeleteConfirm === page.pageNumber ? (
                       <div className="flex items-center gap-1 bg-red-600 text-white rounded-md p-0.5 shadow-md animate-in fade-in">
                         <span className="text-[10px] font-bold px-1">Delete page?</span>
@@ -1225,7 +1152,6 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
           </div>
         )}
 
-        {/* Empty PDF Prompt Banner - only shown if completely fresh note and not dismissed */}
         {(!pdfData || pdfData.pages.length === 0) &&
           !dismissedPdfPrompt &&
           !boxes.some((b) => b.content.replace(/<[^>]*>/g, '').trim().length > 0) && (
@@ -1279,7 +1205,6 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
             </div>
           )}
 
-        {/* ==================== ONENOTE FREEFORM TEXT BOXES LAYER ==================== */}
         <div className="absolute inset-0 pointer-events-none z-20">
           {boxes.map((box) => (
             <OneNoteTextBoxView
@@ -1304,7 +1229,6 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
           ))}
         </div>
 
-        {/* ==================== DRAWING CANVAS OVERLAY ==================== */}
         <canvas
           ref={canvasRef}
           id="note-drawing-canvas"
@@ -1321,7 +1245,6 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
         />
       </div>
 
-      {/* Hidden File Input for PDF Upload */}
       <input
         ref={fileInputRef}
         type="file"
