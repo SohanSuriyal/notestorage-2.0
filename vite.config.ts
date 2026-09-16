@@ -22,8 +22,8 @@ export default defineConfig(() => {
           background_color: '#ffffff',
           display: 'standalone',
           orientation: 'any',
-          start_url: '/',
-          scope: '/',
+          start_url: '/notestorage-2.0/',
+          scope: '/notestorage-2.0/',
           categories: ['productivity', 'education'],
           icons: [
             {
