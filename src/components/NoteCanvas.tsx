@@ -23,6 +23,30 @@ import {
 } from 'lucide-react';
 import { renderPdfPages } from '../utils/pdfLoader';
 
+function getDrawingCursor(tool: DrawingTool, eraserType: EraserType, thickness: number): string {
+  let svg: string;
+  let hotspot = 0;
+
+  if (tool === 'pen') {
+    svg = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 10 10"><circle cx="5" cy="5" r="2.5" fill="#111111"/></svg>`;
+    hotspot = 5;
+  } else if (tool === 'highlighter') {
+    svg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5" fill="#F79009" fill-opacity="0.55" stroke="#111111" stroke-width="1.2"/></svg>`;
+    hotspot = 7;
+  } else if (eraserType === 'stroke-eraser') {
+    svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><g transform="rotate(-45 12 12)"><rect x="6" y="7" width="13" height="10" rx="2" fill="white" stroke="#111111" stroke-width="1.8"/><path d="M8 7h7a4 4 0 0 1 4 4v2H8z" fill="#e5e7eb"/><path d="M6 14h13" stroke="#111111" stroke-width="1.4"/></g></svg>`;
+    hotspot = 12;
+  } else {
+    const radius = Math.max(16, thickness * 2);
+    const size = radius * 2 + 4;
+    const center = radius + 2;
+    svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><circle cx="${center}" cy="${center}" r="${radius}" fill="rgba(127,86,217,0.08)" stroke="#7F56D9" stroke-width="2"/></svg>`;
+    hotspot = center;
+  }
+
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}") ${hotspot} ${hotspot}, auto`;
+}
+
 interface OneNoteTextBoxViewProps {
   box: NoteTextBox;
   isActive: boolean;
@@ -595,7 +619,6 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
     window.addEventListener('mouseup', onMouseUp);
   };
 
-  // Delete a specific text container. The canvas is allowed to have zero text boxes.
   const handleDeleteBox = (boxId: string) => {
     const remaining = boxes.filter((b) => b.id !== boxId);
     syncBoxes(remaining);
@@ -1236,10 +1259,13 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
-          style={{ touchAction: 'none' }}
+          style={{
+            touchAction: 'none',
+            cursor: isDrawingMode ? getDrawingCursor(currentTool, eraserType, thickness) : 'default',
+          }}
           className={`absolute inset-0 w-full h-full ${
             isDrawingMode
-              ? 'pointer-events-auto cursor-crosshair z-30 select-none'
+              ? 'pointer-events-auto cursor-none z-30 select-none'
               : 'pointer-events-none z-10'
           }`}
         />
