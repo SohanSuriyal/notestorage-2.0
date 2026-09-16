@@ -24,6 +24,7 @@ interface SubjectsViewProps {
   initialSubject?: string | null;
   onClearInitialSubject?: () => void;
   darkMode?: boolean;
+  compact?: boolean;
 }
 
 function formatLastUpdated(timestamp: number): string {
@@ -60,6 +61,7 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
   initialSubject = null,
   onClearInitialSubject,
   darkMode = false,
+  compact = false,
 }) => {
   const [selectedSubject, setSelectedSubject] = useState<string | null>(initialSubject);
   const [searchQuery, setSearchQuery] = useState('');
@@ -143,7 +145,7 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
       : allTopics;
 
     return (
-      <div className="flex-1 overflow-y-auto px-6 sm:px-8 py-6 select-none max-w-6xl mx-auto w-full">
+      <div className={`flex-1 overflow-y-auto select-none max-w-6xl mx-auto w-full ${compact ? 'py-4 px-4 sm:px-6' : 'py-6 px-6 sm:px-8'}`}>
         {/* Top Navigation & Breadcrumbs */}
         <div className="flex flex-col gap-3 mb-6">
           <div className="flex items-center gap-2">
@@ -444,8 +446,8 @@ export const SubjectsView: React.FC<SubjectsViewProps> = ({
   // VIEW 2: SUBJECTS OVERVIEW
   // --------------------------------------------------------------------------
   return (
-    <div className="flex-1 overflow-y-auto px-6 sm:px-8 py-6 select-none max-w-6xl mx-auto w-full">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-7">
+    <div className={`flex-1 overflow-y-auto select-none max-w-6xl mx-auto w-full ${compact ? 'py-4 px-4 sm:px-6' : 'py-6 px-6 sm:px-8'}`}>
+      <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${compact ? 'mb-4' : 'mb-7'}`}>
         <div>
           <span className="text-xs font-semibold tracking-wide uppercase text-gray-500 dark:text-zinc-400">
             Library

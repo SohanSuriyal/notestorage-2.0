@@ -5,6 +5,8 @@ import {
   Pencil,
   Upload,
   Trash2,
+  BookOpen,
+  PanelLeft,
 } from 'lucide-react';
 
 interface NotesHeaderProps {
@@ -14,7 +16,12 @@ interface NotesHeaderProps {
   onExport: () => void;
   onDelete: () => void;
   isSaved: boolean;
+  subject?: string;
+  topic?: string;
+  isSidebarOpen?: boolean;
+  onToggleSidebar?: () => void;
   darkMode?: boolean;
+  compact?: boolean;
 }
 
 export const NotesHeader: React.FC<NotesHeaderProps> = ({
@@ -24,7 +31,12 @@ export const NotesHeader: React.FC<NotesHeaderProps> = ({
   onExport,
   onDelete,
   isSaved,
+  subject,
+  topic,
+  isSidebarOpen = true,
+  onToggleSidebar,
   darkMode = false,
+  compact = false,
 }) => {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(title);
@@ -61,58 +73,109 @@ export const NotesHeader: React.FC<NotesHeaderProps> = ({
   };
 
   return (
-    <header className="flex flex-wrap items-center justify-between gap-3 py-2 select-none">
-      {/* Left side: Back to notes + Note Title */}
-      <div className="flex items-center gap-3 sm:gap-5 min-w-0 flex-1">
+    <header className="flex flex-wrap items-center justify-between gap-3 py-2 select-none border-b border-gray-100 dark:border-zinc-800/80 mb-2">
+      {/* Left side: Back to notes + Sidebar Toggle + Breadcrumb & Title */}
+      <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0 flex-1">
         <button
           type="button"
           id="back-to-notes-btn"
           onClick={onBack}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition-all active:scale-95 shadow-2xs cursor-pointer ${
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-sm font-medium transition-all active:scale-95 shadow-2xs cursor-pointer ${
             darkMode
               ? 'border-zinc-700 bg-zinc-800/80 text-zinc-200 hover:bg-zinc-800 active:bg-zinc-700'
               : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 active:bg-gray-100'
           }`}
+          title="Back to Dashboard"
         >
           <ChevronLeft className="w-4 h-4 text-gray-500 dark:text-zinc-400" />
           <span className="hidden xs:inline sm:inline">Notes</span>
         </button>
 
-        {isEditingTitle ? (
-          <input
-            ref={inputRef}
-            id="note-title-input"
-            type="text"
-            value={titleDraft}
-            onChange={(e) => setTitleDraft(e.target.value)}
-            onBlur={handleSaveTitle}
-            onKeyDown={handleKeyDown}
-            className={`text-xl sm:text-2xl font-bold tracking-tight px-1 py-0.5 rounded-md border outline-none min-w-0 max-w-full ${
-              darkMode
-                ? 'bg-zinc-800 border-zinc-700 text-white'
-                : 'bg-white border-purple-400 text-gray-900 ring-2 ring-purple-100'
+        {onToggleSidebar && (
+          <button
+            type="button"
+            id="toggle-subject-sidebar-header-btn"
+            onClick={onToggleSidebar}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs sm:text-sm font-medium transition-all shadow-2xs cursor-pointer ${
+              isSidebarOpen
+                ? 'border-purple-300 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/40 text-[#7F56D9] dark:text-purple-300'
+                : darkMode
+                  ? 'border-zinc-700 bg-zinc-800/80 text-zinc-300 hover:bg-zinc-800'
+                  : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
             }`}
-          />
-        ) : (
-          <h1
-            id="note-title-heading"
-            onClick={() => setIsEditingTitle(true)}
-            className={`text-xl sm:text-2xl font-bold tracking-tight cursor-pointer hover:opacity-80 transition-opacity truncate max-w-[200px] sm:max-w-md ${
-              darkMode ? 'text-white' : 'text-gray-900'
-            }`}
-            title="Click to rename"
+            title={isSidebarOpen ? 'Hide Subjects & Topics sidebar' : 'Show Subjects & Topics sidebar'}
           >
-            {title || 'Untitled note'}
-          </h1>
+            <BookOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#7F56D9]" />
+            <span className="hidden sm:inline">Topics</span>
+          </button>
         )}
+
+        <div className="flex flex-col min-w-0">
+          {/* Breadcrumb indicating Subject and Topic */}
+          {(subject || topic) && (
+            <div className="flex items-center gap-1.5 text-[11px] text-gray-400 dark:text-zinc-500 mb-0.5 truncate">
+              <span className="px-1.5 py-0.2 rounded bg-purple-50 dark:bg-purple-950/50 text-[#7F56D9] dark:text-purple-300 font-semibold uppercase tracking-wider text-[10px]">
+                {subject || 'General'}
+              </span>
+              <span>›</span>
+              <span className="font-medium text-gray-600 dark:text-zinc-300 truncate">
+                {topic || 'General'}
+              </span>
+            </div>
+          )}
+
+          {isEditingTitle ? (
+            <input
+              ref={inputRef}
+              id="note-title-input"
+              type="text"
+              value={titleDraft}
+              onChange={(e) => setTitleDraft(e.target.value)}
+              onBlur={handleSaveTitle}
+              onKeyDown={handleKeyDown}
+              className={`text-lg sm:text-xl font-bold tracking-tight px-1 py-0.5 rounded-md border outline-none min-w-0 max-w-full ${
+                darkMode
+                  ? 'bg-zinc-800 border-zinc-700 text-white'
+                  : 'bg-white border-purple-400 text-gray-900 ring-2 ring-purple-100'
+              }`}
+            />
+          ) : (
+            <h1
+              id="note-title-heading"
+              onClick={() => setIsEditingTitle(true)}
+              className={`text-lg sm:text-xl font-bold tracking-tight cursor-pointer hover:opacity-80 transition-opacity truncate max-w-[180px] sm:max-w-md ${
+                darkMode ? 'text-white' : 'text-gray-900'
+              }`}
+              title="Click to rename"
+            >
+              {title || 'Untitled note'}
+            </h1>
+          )}
+        </div>
       </div>
 
       {/* Right side: Saved badge, Rename, Export, Delete */}
       <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap flex-shrink-0">
-        {/* Saved Status Indicator */}
-        <div className="flex items-center gap-1.5 mr-1 sm:mr-2">
-          <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#12B76A] fill-[#12B76A]" />
-          <span className="text-xs sm:text-sm font-normal text-gray-600 dark:text-zinc-400">
+        {/* Saved Status Indicator - stable fixed width to prevent layout jitter */}
+        <div
+          id="note-save-status-badge"
+          className="flex items-center gap-1.5 w-[76px] select-none"
+          title={isSaved ? 'All changes saved' : 'Saving changes...'}
+        >
+          <span
+            className={`w-2 h-2 rounded-full transition-all duration-300 ${
+              isSaved
+                ? 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.5)]'
+                : 'bg-amber-400 animate-pulse'
+            }`}
+          />
+          <span
+            className={`text-xs font-normal transition-colors duration-200 ${
+              isSaved
+                ? 'text-gray-500 dark:text-zinc-400'
+                : 'text-gray-400 dark:text-zinc-500'
+            }`}
+          >
             {isSaved ? 'Saved' : 'Saving...'}
           </span>
         </div>

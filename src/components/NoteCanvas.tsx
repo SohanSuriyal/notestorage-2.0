@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
+import { getStroke } from 'perfect-freehand';
 import {
   DrawingStroke,
   DrawingTool,
@@ -29,6 +30,7 @@ interface OneNoteTextBoxViewProps {
   isResizing: boolean;
   isDrawingMode: boolean;
   darkMode: boolean;
+  editorFont?: 'sans' | 'serif' | 'mono';
   onSelect: () => void;
   onStartDrag: (e: React.MouseEvent) => void;
   onStartResize: (e: React.MouseEvent) => void;
@@ -44,6 +46,7 @@ const OneNoteTextBoxView: React.FC<OneNoteTextBoxViewProps> = ({
   isResizing,
   isDrawingMode,
   darkMode,
+  editorFont = 'sans',
   onSelect,
   onStartDrag,
   onStartResize,
@@ -53,6 +56,9 @@ const OneNoteTextBoxView: React.FC<OneNoteTextBoxViewProps> = ({
 }) => {
   const editorRef = useRef<HTMLDivElement>(null);
   const isInitialMount = useRef(true);
+
+  const fontClass =
+    editorFont === 'serif' ? 'font-serif' : editorFont === 'mono' ? 'font-mono' : 'font-sans';
 
   // Initialize and synchronize innerHTML when box.content updates externally without destroying caret on typing
   useEffect(() => {
@@ -133,7 +139,7 @@ const OneNoteTextBoxView: React.FC<OneNoteTextBoxViewProps> = ({
           fontFamily: box.fontFamily,
           fontSize: box.fontSize,
         }}
-        className={`onenote-text-editor p-2.5 min-h-[50px] outline-none text-base leading-relaxed ${
+        className={`onenote-text-editor p-2.5 min-h-[50px] outline-none text-base leading-relaxed ${fontClass} ${
           isDrawingMode ? 'pointer-events-none select-none' : 'pointer-events-auto'
         } ${darkMode ? 'text-zinc-100' : 'text-gray-900'}`}
       />
@@ -149,6 +155,126 @@ const OneNoteTextBoxView: React.FC<OneNoteTextBoxViewProps> = ({
     </div>
   );
 };
+
+// Helper to convert perfect-freehand outline points [x, y] to SVG path / Canvas Path2D
+function getSvgPathFromStroke(strokeOutline: number[][]): Path2D {
+  const path = new Path2D();
+  if (strokeOutline.length < 2) return path;
+
+  path.moveTo(strokeOutline[0][0], strokeOutline[0][1]);
+  for (let i = 1; i < strokeOutline.length; i++) {
+    const [x0, y0] = strokeOutline[i - 1];
+    const [x1, y1] = strokeOutline[i];
+    const midX = (x0 + x1) / 2;
+    const midY = (y0 + y1) / 2;
+    path.quadraticCurveTo(x0, y0, midX, midY);
+  }
+  path.closePath();
+  return path;
+}
+
+// Distance-based point simplifier to eliminate hand tremor jitter
+function filterJitterPoints(pts: DrawingPoint[]): DrawingPoint[] {
+  if (pts.length <= 2) return pts;
+  const result: DrawingPoint[] = [pts[0]];
+  for (let i = 1; i < pts.length; i++) {
+    const prev = result[result.length - 1];
+    const cur = pts[i];
+    // Filter out micro-tremor points closer than 1.5px unless it is the last point
+    if (Math.hypot(cur.x - prev.x, cur.y - prev.y) >= 1.5 || i === pts.length - 1) {
+      result.push(cur);
+    }
+  }
+  return result;
+}
+
+// Render a stroke with studio-grade smoothness onto a 2D canvas context
+function renderStrokeToContext(ctx: CanvasRenderingContext2D, stroke: DrawingStroke) {
+  if (!stroke.points || stroke.points.length === 0) return;
+
+  const rawPts = stroke.points;
+  const isPen = stroke.tool === 'pen';
+  const isHighlighter = stroke.tool === 'highlighter';
+
+  ctx.save();
+
+  if (isHighlighter) {
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.strokeStyle = stroke.color;
+    ctx.globalAlpha = 0.35;
+    ctx.lineWidth = Math.max(stroke.size * 3, 14);
+
+    if (rawPts.length === 1) {
+      ctx.beginPath();
+      ctx.arc(rawPts[0].x, rawPts[0].y, ctx.lineWidth / 2, 0, Math.PI * 2);
+      ctx.fillStyle = stroke.color;
+      ctx.fill();
+    } else {
+      ctx.beginPath();
+      ctx.moveTo(rawPts[0].x, rawPts[0].y);
+      for (let i = 1; i < rawPts.length - 1; i++) {
+        const xc = (rawPts[i].x + rawPts[i + 1].x) / 2;
+        const yc = (rawPts[i].y + rawPts[i + 1].y) / 2;
+        ctx.quadraticCurveTo(rawPts[i].x, rawPts[i].y, xc, yc);
+      }
+      ctx.lineTo(rawPts[rawPts.length - 1].x, rawPts[rawPts.length - 1].y);
+      ctx.stroke();
+    }
+    ctx.restore();
+    return;
+  }
+
+  // Pen Tool: Production-grade handwriting synthesis via perfect-freehand
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = stroke.color;
+  ctx.globalAlpha = 1.0;
+
+  if (rawPts.length === 1) {
+    const r = Math.max(1, stroke.size / 2);
+    ctx.beginPath();
+    ctx.arc(rawPts[0].x, rawPts[0].y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    return;
+  }
+
+  // Filter jitter points to ensure silky smooth curves
+  const cleanPts = filterJitterPoints(rawPts);
+  const inputPoints = cleanPts.map((p) => [p.x, p.y, p.pressure ?? 0.5]);
+
+  const outline = getStroke(inputPoints, {
+    size: stroke.size,
+    thinning: 0.45,
+    smoothing: 0.92,
+    streamline: 0.7,
+    simulatePressure: true,
+    last: true,
+  });
+
+  if (outline && outline.length > 2) {
+    const path = getSvgPathFromStroke(outline);
+    ctx.fill(path);
+  } else {
+    // Fallback smooth bezier
+    ctx.strokeStyle = stroke.color;
+    ctx.lineWidth = stroke.size;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(cleanPts[0].x, cleanPts[0].y);
+    for (let i = 1; i < cleanPts.length - 1; i++) {
+      const xc = (cleanPts[i].x + cleanPts[i + 1].x) / 2;
+      const yc = (cleanPts[i].y + cleanPts[i + 1].y) / 2;
+      ctx.quadraticCurveTo(cleanPts[i].x, cleanPts[i].y, xc, yc);
+    }
+    ctx.lineTo(cleanPts[cleanPts.length - 1].x, cleanPts[cleanPts.length - 1].y);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
 
 interface NoteCanvasProps {
   contentHtml: string;
@@ -168,6 +294,7 @@ interface NoteCanvasProps {
   pdfData?: PdfDocumentData;
   onPdfDataChange?: (newPdf: PdfDocumentData | undefined) => void;
   darkMode?: boolean;
+  editorFont?: 'sans' | 'serif' | 'mono';
 }
 
 export const NoteCanvas: React.FC<NoteCanvasProps> = ({
@@ -187,6 +314,7 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
   pdfData,
   onPdfDataChange,
   darkMode = false,
+  editorFont = 'sans',
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const contentWrapperRef = useRef<HTMLDivElement>(null);
@@ -294,44 +422,7 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
     ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr);
 
     strokes.forEach((stroke) => {
-      if (!stroke.points || stroke.points.length === 0) return;
-
-      ctx.save();
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-
-      if (stroke.tool === 'highlighter') {
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.strokeStyle = stroke.color;
-        ctx.globalAlpha = 0.32;
-        ctx.lineWidth = Math.max(stroke.size * 3, 14);
-      } else if (stroke.tool === 'pen') {
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.strokeStyle = stroke.color;
-        ctx.globalAlpha = 1.0;
-        ctx.lineWidth = stroke.size;
-      }
-
-      const pts = stroke.points;
-      if (pts.length === 1) {
-        ctx.beginPath();
-        ctx.arc(pts[0].x, pts[0].y, stroke.size / 2, 0, Math.PI * 2);
-        ctx.fillStyle = stroke.color;
-        ctx.fill();
-      } else {
-        ctx.beginPath();
-        ctx.moveTo(pts[0].x, pts[0].y);
-
-        for (let i = 1; i < pts.length - 1; i++) {
-          const xc = (pts[i].x + pts[i + 1].x) / 2;
-          const yc = (pts[i].y + pts[i + 1].y) / 2;
-          ctx.quadraticCurveTo(pts[i].x, pts[i].y, xc, yc);
-        }
-        ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
-        ctx.stroke();
-      }
-
-      ctx.restore();
+      renderStrokeToContext(ctx, stroke);
     });
   }, [strokes]);
 
@@ -601,6 +692,8 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
+    const pressure = e.pressure !== undefined && e.pressure > 0 ? e.pressure : 0.5;
+    const time = Date.now();
 
     setIsPointerDown(true);
     canvas.setPointerCapture(e.pointerId);
@@ -619,38 +712,14 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
       tool: currentTool,
       color,
       size: thickness,
-      points: [{ x, y }],
+      points: [{ x, y, pressure, time }],
     };
 
     currentStrokeRef.current = newStroke;
 
     const ctx = canvas.getContext('2d');
     if (ctx) {
-      ctx.save();
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      if (currentTool === 'highlighter') {
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.strokeStyle = color;
-        ctx.globalAlpha = 0.32;
-        ctx.lineWidth = Math.max(thickness * 3, 14);
-      } else {
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.strokeStyle = color;
-        ctx.globalAlpha = 1.0;
-        ctx.lineWidth = thickness;
-      }
-      ctx.beginPath();
-      ctx.arc(
-        x,
-        y,
-        (currentTool === 'highlighter' ? Math.max(thickness * 3, 14) : thickness) / 2,
-        0,
-        Math.PI * 2
-      );
-      ctx.fillStyle = color;
-      ctx.fill();
-      ctx.restore();
+      renderStrokeToContext(ctx, newStroke);
     }
   };
 
@@ -674,35 +743,54 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
 
     if (!currentStrokeRef.current) return;
     const stroke = currentStrokeRef.current;
-    const prevPoint = stroke.points[stroke.points.length - 1];
 
-    if (!prevPoint || Math.hypot(x - prevPoint.x, y - prevPoint.y) > 2) {
-      stroke.points.push({ x, y });
+    // Support coalesced raw events when available for high-rate stylus / apple pencil / mouse sampling
+    const rawEvents = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : [e];
 
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
+    rawEvents.forEach((ev) => {
+      const ex = ev.clientX - rect.left;
+      const ey = ev.clientY - rect.top;
+      const epressure = ev.pressure !== undefined && ev.pressure > 0 ? ev.pressure : 0.5;
+      const etime = Date.now();
+      const last = stroke.points[stroke.points.length - 1];
+
+      if (!last || Math.hypot(ex - last.x, ey - last.y) >= 1) {
+        stroke.points.push({ x: ex, y: ey, pressure: epressure, time: etime });
+      }
+    });
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    if (stroke.tool === 'highlighter') {
+      const pts = stroke.points;
+      if (pts.length >= 2) {
+        const p1 = pts[pts.length - 2];
+        const p2 = pts[pts.length - 1];
         ctx.save();
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
-        if (currentTool === 'highlighter') {
-          ctx.globalCompositeOperation = 'source-over';
-          ctx.strokeStyle = color;
-          ctx.globalAlpha = 0.32;
-          ctx.lineWidth = Math.max(thickness * 3, 14);
-        } else {
-          ctx.globalCompositeOperation = 'source-over';
-          ctx.strokeStyle = color;
-          ctx.globalAlpha = 1.0;
-          ctx.lineWidth = thickness;
-        }
-
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.strokeStyle = color;
+        ctx.globalAlpha = 0.35;
+        ctx.lineWidth = Math.max(thickness * 3, 14);
         ctx.beginPath();
-        ctx.moveTo(prevPoint.x, prevPoint.y);
-        ctx.lineTo(x, y);
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
         ctx.stroke();
         ctx.restore();
       }
+      return;
     }
+
+    // Pen Tool: Clear canvas and re-render all committed strokes + active stroke with perfect-freehand outline
+    const dpr = window.devicePixelRatio || 1;
+    ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr);
+
+    strokes.forEach((s) => {
+      renderStrokeToContext(ctx, s);
+    });
+    renderStrokeToContext(ctx, stroke);
   };
 
   const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -716,8 +804,17 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
     }
 
     if (currentStrokeRef.current && currentStrokeRef.current.points.length > 0) {
-      onStrokesChange([...strokes, currentStrokeRef.current]);
+      const completedStroke: DrawingStroke = {
+        ...currentStrokeRef.current,
+      };
+
+      const updatedStrokes = [...strokes, completedStroke];
+      onStrokesChange(updatedStrokes);
       currentStrokeRef.current = null;
+
+      requestAnimationFrame(() => {
+        redrawAllStrokes();
+      });
     }
   };
 
@@ -915,9 +1012,11 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
       {/* Main Expansive Content Area (Click anywhere to add OneNote container) */}
       <div
         ref={contentWrapperRef}
+        id="note-page-content-wrapper"
+        data-paper-style={paperStyle}
         onClick={handleWrapperClick}
         style={{ minHeight: `${wrapperMinHeight}px` }}
-        className="relative w-full p-6 cursor-text select-text"
+        className={`relative w-full p-6 cursor-text select-text ${paperClass}`}
         title={!isDrawingMode ? 'Click anywhere on the page to start writing' : undefined}
       >
         {/* PDF Document Section (If PDF is attached) */}
@@ -1191,6 +1290,7 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
               isResizing={resizingBoxId === box.id}
               isDrawingMode={isDrawingMode}
               darkMode={darkMode}
+              editorFont={editorFont}
               onSelect={() => setActiveBoxId(box.id)}
               onStartDrag={(e) => handleStartDragBox(box.id, e)}
               onStartResize={(e) => handleStartResizeBox(box.id, e)}
@@ -1212,30 +1312,14 @@ export const NoteCanvas: React.FC<NoteCanvasProps> = ({
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
+          style={{ touchAction: 'none' }}
           className={`absolute inset-0 w-full h-full ${
             isDrawingMode
-              ? 'pointer-events-auto cursor-crosshair z-30'
+              ? 'pointer-events-auto cursor-crosshair z-30 select-none'
               : 'pointer-events-none z-10'
           }`}
         />
       </div>
-
-      {/* Drawing Mode Active Status Floating Pill */}
-      {isDrawingMode && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 px-4 py-2 rounded-full bg-zinc-900/90 dark:bg-zinc-100/90 text-white dark:text-zinc-900 shadow-xl backdrop-blur-xs border border-white/10 text-xs font-medium animate-in fade-in slide-in-from-bottom-2">
-          <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span>Drawing Mode Active — Draw anywhere over notes & PDF</span>
-          {onToggleDrawing && (
-            <button
-              type="button"
-              onClick={onToggleDrawing}
-              className="ml-2 px-2.5 py-0.5 rounded-full bg-white/20 dark:bg-black/20 hover:bg-white/30 text-xs font-bold transition-colors"
-            >
-              Done
-            </button>
-          )}
-        </div>
-      )}
 
       {/* Hidden File Input for PDF Upload */}
       <input

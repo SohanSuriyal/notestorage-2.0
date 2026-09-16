@@ -12,6 +12,7 @@ import {
   ChevronsRight,
 } from 'lucide-react';
 import { NavPage } from '../types';
+import { PWAInstallButton } from './PWAInstallButton';
 
 interface SidebarProps {
   currentPage: NavPage;
@@ -20,6 +21,7 @@ interface SidebarProps {
   onToggleCollapse: () => void;
   darkMode: boolean;
   onToggleDarkMode: () => void;
+  compact?: boolean;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -29,6 +31,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onToggleCollapse,
   darkMode,
   onToggleDarkMode,
+  compact = false,
 }) => {
   const navItems = [
     { id: 'dashboard' as NavPage, label: 'Dashboard', icon: Home },
@@ -45,10 +48,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
         darkMode
           ? 'bg-[#18181b] border-zinc-800 text-zinc-200'
           : 'bg-white border-[#EAECF0] text-gray-700'
-      } ${collapsed ? 'w-[70px] px-2' : 'w-[230px] px-3.5'} py-5 flex-shrink-0 min-h-screen`}
+      } ${collapsed ? 'w-[70px] px-2' : 'w-[230px] px-3.5'} ${compact ? 'py-3' : 'py-5'} flex-shrink-0 min-h-screen`}
     >
       {/* Brand Header */}
-      <div className="flex items-center justify-between mb-7 px-1.5">
+      <div className={`flex items-center justify-between ${compact ? 'mb-4' : 'mb-7'} px-1.5`}>
         {!collapsed ? (
           <div className="flex items-center">
             <span
@@ -95,7 +98,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               key={item.id}
               id={`nav-item-${item.id}`}
               onClick={() => onSelectPage(item.id)}
-              className={`flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
+              className={`flex items-center gap-3 px-3 ${compact ? 'py-1.5' : 'py-2'} rounded-xl text-sm font-medium transition-all ${
                 isActive
                   ? darkMode
                     ? 'bg-[#27272a] text-[#c084fc]'
@@ -125,7 +128,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </nav>
 
       {/* Bottom Actions */}
-      <div className="mt-auto pt-4 border-t border-gray-100 dark:border-zinc-800">
+      <div className="mt-auto pt-4 border-t border-gray-100 dark:border-zinc-800 space-y-2">
+        {!collapsed && (
+          <div className="px-1">
+            <PWAInstallButton variant="sidebar" darkMode={darkMode} />
+          </div>
+        )}
+
         <button
           id="theme-toggle-btn"
           onClick={onToggleDarkMode}

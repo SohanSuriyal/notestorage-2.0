@@ -6,6 +6,8 @@ export type EraserType = 'stroke-eraser' | 'eraser';
 export interface DrawingPoint {
   x: number;
   y: number;
+  pressure?: number;
+  time?: number;
 }
 
 export interface DrawingStroke {
@@ -67,8 +69,11 @@ export interface AppSettings {
   compact: boolean;
   animations: boolean;
   defaultView: 'grid' | 'list';
-  defaultSort: 'recent' | 'name' | 'name-desc';
+  defaultSort: 'recent' | 'name' | 'name-desc' | 'oldest';
+  defaultPaperStyle: PaperStyle;
+  editorFont: 'sans' | 'serif' | 'mono';
   rememberLastSubject: boolean;
+  defaultSubject: string;
   confirmDelete: boolean;
   lastSubject: string;
 }

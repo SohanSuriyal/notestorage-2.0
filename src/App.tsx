@@ -3,6 +3,7 @@ import { NavPage, NoteItem, DrawingTool, EraserType, DrawingStroke, AppSettings 
 import { Sidebar } from './components/Sidebar';
 import { NotesHeader } from './components/NotesHeader';
 import { SubjectTopicBar } from './components/SubjectTopicBar';
+import { SubjectTopicSidebar } from './components/SubjectTopicSidebar';
 import { FormattingToolbar } from './components/FormattingToolbar';
 import { DrawingToolbar } from './components/DrawingToolbar';
 import { NoteCanvas } from './components/NoteCanvas';
@@ -45,7 +46,10 @@ const DEFAULT_SETTINGS: AppSettings = {
   animations: true,
   defaultView: 'grid',
   defaultSort: 'recent',
+  defaultPaperStyle: 'ruled',
+  editorFont: 'sans',
   rememberLastSubject: true,
+  defaultSubject: 'dbms',
   confirmDelete: true,
   lastSubject: 'dbms',
 };
@@ -113,6 +117,11 @@ export default function App() {
   const [activeNoteId, setActiveNoteId] = useState<string>(INITIAL_NOTE.id);
   const [isSaved, setIsSaved] = useState<boolean>(true);
   const [isExportOpen, setIsExportOpen] = useState(false);
+  const [isSubjectTopicSidebarOpen, setIsSubjectTopicSidebarOpen] = useState<boolean>(true);
+
+  // Debounce ref for isSaved status to prevent rapid flickering
+  const saveDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const markSavedTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Custom subjects list persisted in storage
   const [customSubjects, setCustomSubjects] = useState<string[]>(() => {
@@ -168,6 +177,19 @@ export default function App() {
     }
   }, [settings]);
 
+  // Sync darkMode with settings.theme (handling system preference)
+  useEffect(() => {
+    if (settings.theme === 'system') {
+      const mq = window.matchMedia('(prefers-color-scheme: dark)');
+      setDarkMode(mq.matches);
+      const handler = (e: MediaQueryListEvent) => setDarkMode(e.matches);
+      mq.addEventListener('change', handler);
+      return () => mq.removeEventListener('change', handler);
+    } else {
+      setDarkMode(settings.theme === 'dark');
+    }
+  }, [settings.theme]);
+
   // Dark mode effect
   useEffect(() => {
     if (darkMode) {
@@ -185,9 +207,8 @@ export default function App() {
     setSettings((prev) => ({ ...prev, theme: next ? 'dark' : 'light' }));
   };
 
-  // Update active note
+  // Update active note with smooth debounced saved indicator
   const updateActiveNote = (updates: Partial<NoteItem>) => {
-    setIsSaved(false);
     setNotes((prevNotes) =>
       prevNotes.map((n) =>
         n.id === activeNote.id
@@ -195,15 +216,45 @@ export default function App() {
           : n
       )
     );
-    // Simulate instantaneous saved state
-    setTimeout(() => {
+
+    // If a timer was already waiting to mark as saved, clear it
+    if (markSavedTimerRef.current) {
+      clearTimeout(markSavedTimerRef.current);
+    }
+
+    // Only transition indicator to 'Saving...' after user pauses slightly (prevents flicker on continuous drawing)
+    if (!saveDebounceTimerRef.current) {
+      saveDebounceTimerRef.current = setTimeout(() => {
+        setIsSaved(false);
+      }, 500);
+    }
+
+    // Reset mark-as-saved delay: stays quiet and clean until 1.2s after drawing/typing finishes
+    markSavedTimerRef.current = setTimeout(() => {
+      if (saveDebounceTimerRef.current) {
+        clearTimeout(saveDebounceTimerRef.current);
+        saveDebounceTimerRef.current = null;
+      }
       setIsSaved(true);
-    }, 400);
+    }, 1200);
+  };
+
+  // Rename any note by id
+  const handleRenameNote = (noteId: string, newTitle: string) => {
+    setNotes((prevNotes) =>
+      prevNotes.map((n) =>
+        n.id === noteId
+          ? { ...n, title: newTitle.trim() || 'Untitled note', updated: Date.now() }
+          : n
+      )
+    );
   };
 
   // Note creation
   const handleCreateNote = (presetSubject?: string, presetTopic?: string) => {
-    const subject = presetSubject || (settings.rememberLastSubject ? settings.lastSubject : 'dbms');
+    const subject =
+      presetSubject ||
+      (settings.rememberLastSubject ? settings.lastSubject : settings.defaultSubject || 'dbms');
     const topic = presetTopic || 'Week 6';
     const noteId = `note_${Date.now()}`;
     const newNote: NoteItem = {
@@ -221,7 +272,7 @@ export default function App() {
           content: '<p><br></p>',
         },
       ],
-      paperStyle: 'ruled',
+      paperStyle: settings.defaultPaperStyle || 'ruled',
       strokes: [],
       created: Date.now(),
       updated: Date.now(),
@@ -338,6 +389,60 @@ export default function App() {
     setNotes((prev) =>
       prev.map((n) => (n.id === noteId ? { ...n, favorite: !n.favorite } : n))
     );
+  };
+
+  const handleDeleteCustomSubject = (subj: string) => {
+    setCustomSubjects((prev) => prev.filter((s) => s !== subj));
+  };
+
+  const handleResetSettings = () => {
+    setSettings(DEFAULT_SETTINGS);
+    try {
+      localStorage.setItem('ns_settings', JSON.stringify(DEFAULT_SETTINGS));
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleResetDemoNotes = () => {
+    const demo: NoteItem[] = [
+      INITIAL_NOTE,
+      {
+        id: 'note_2',
+        title: 'Relational Algebra & Normalization',
+        subject: 'dbms',
+        topic: 'Week 5',
+        content: '<h2>Relational Algebra Basics</h2><p>Selection, Projection, Cartesian Product, Union, Set Difference.</p>',
+        strokes: [],
+        created: Date.now() - 86400000,
+        updated: Date.now() - 86400000,
+        favorite: true,
+        type: 'written',
+      },
+      {
+        id: 'note_3',
+        title: 'Concurrency Control & ACID',
+        subject: 'dbms',
+        topic: 'Week 7',
+        content: '<h2>ACID Properties</h2><ul><li><b>Atomicity</b></li><li><b>Consistency</b></li><li><b>Isolation</b></li><li><b>Durability</b></li></ul>',
+        strokes: [],
+        created: Date.now() - 172800000,
+        updated: Date.now() - 172800000,
+        favorite: false,
+        type: 'written',
+      },
+    ];
+    setNotes(demo);
+    setActiveNoteId(demo[0].id);
+    saveNotesToStorage(demo);
+  };
+
+  const handleImportNotes = (importedNotes: NoteItem[]) => {
+    if (importedNotes.length > 0) {
+      setNotes(importedNotes);
+      setActiveNoteId(importedNotes[0].id);
+      saveNotesToStorage(importedNotes);
+    }
   };
 
   // Drawing strokes handling with undo/redo
@@ -697,9 +802,10 @@ export default function App() {
 
   return (
     <div
+      data-compact={settings.compact ? 'true' : 'false'}
       className={`flex h-screen w-screen overflow-hidden ${
         darkMode ? 'bg-[#121214] text-zinc-100' : 'bg-[#FAFAFA] text-gray-900'
-      }`}
+      } ${!settings.animations ? '[&_*]:!transition-none [&_*]:!animation-none' : ''}`}
     >
       {/* Left Sidebar */}
       <Sidebar
@@ -714,39 +820,69 @@ export default function App() {
         onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
         darkMode={darkMode}
         onToggleDarkMode={toggleDarkMode}
+        compact={settings.compact}
       />
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col h-screen overflow-hidden min-w-0">
         {currentPage === 'notes' && (
-          <div className="flex-1 flex flex-col h-full overflow-hidden px-8 py-5">
-            {/* Top Header Row */}
-            <NotesHeader
-              title={activeNote.title}
-              onTitleChange={(newTitle) => updateActiveNote({ title: newTitle })}
-              onBack={() => setCurrentPage('dashboard')}
-              onExport={() => setIsExportOpen(true)}
-              onDelete={handleDeleteActiveNote}
-              isSaved={isSaved}
-              darkMode={darkMode}
-            />
-
-            {/* Subject & Topic Selector Row */}
-            <SubjectTopicBar
-              subject={activeNote.subject || 'dbms'}
-              topic={activeNote.topic || 'Week 6'}
-              subjectsList={allSubjects}
-              topicsList={allTopicsForSubject}
-              onSubjectChange={(newSubject) => {
+          <div className="flex-1 flex flex-row h-full overflow-hidden min-w-0">
+            {/* Subject & Topics Sidebar (Yellow highlighted side) */}
+            <SubjectTopicSidebar
+              notes={notes}
+              activeNote={activeNote}
+              allSubjects={allSubjects}
+              customSubjects={customSubjects}
+              onSelectNote={(noteId) => {
+                setActiveNoteId(noteId);
+                undoStackRef.current = [];
+                redoStackRef.current = [];
+              }}
+              onCreateNote={(subject, topic) => {
+                handleCreateNote(subject, topic);
+              }}
+              onAddSubject={(subjectName, initialTopic) => {
+                handleAddSubject(subjectName, initialTopic, true);
+              }}
+              onUpdateActiveNoteSubject={(newSubject) => {
                 updateActiveNote({ subject: newSubject });
                 setSettings((s) => ({ ...s, lastSubject: newSubject }));
                 if (!customSubjects.includes(newSubject)) {
                   setCustomSubjects((prev) => [...prev, newSubject]);
                 }
               }}
-              onTopicChange={(newTopic) => updateActiveNote({ topic: newTopic })}
+              onUpdateActiveNoteTopic={(newTopic) => {
+                updateActiveNote({ topic: newTopic });
+              }}
+              onToggleFavorite={handleToggleFavorite}
+              onRenameNote={handleRenameNote}
+              isOpen={isSubjectTopicSidebarOpen}
+              onToggleOpen={() => setIsSubjectTopicSidebarOpen(!isSubjectTopicSidebarOpen)}
               darkMode={darkMode}
+              compact={settings.compact}
             />
+
+            {/* Note Editor Area */}
+            <div
+              className={`flex-1 flex flex-col h-full overflow-hidden min-w-0 ${
+                settings.compact ? 'px-3 py-2 sm:px-5 sm:py-2.5' : 'px-6 sm:px-8 py-3.5'
+              }`}
+            >
+              {/* Top Header Row */}
+              <NotesHeader
+                title={activeNote.title}
+                onTitleChange={(newTitle) => updateActiveNote({ title: newTitle })}
+                onBack={() => setCurrentPage('dashboard')}
+                onExport={() => setIsExportOpen(true)}
+                onDelete={handleDeleteActiveNote}
+                isSaved={isSaved}
+                subject={activeNote.subject}
+                topic={activeNote.topic}
+                isSidebarOpen={isSubjectTopicSidebarOpen}
+                onToggleSidebar={() => setIsSubjectTopicSidebarOpen(!isSubjectTopicSidebarOpen)}
+                darkMode={darkMode}
+                compact={settings.compact}
+              />
 
             {/* First Toolbar: Rich Text & Insertion Formatting */}
             <div className="mb-2">
@@ -821,10 +957,12 @@ export default function App() {
                 pdfData={activeNote.pdfData}
                 onPdfDataChange={(pdfData) => updateActiveNote({ pdfData })}
                 darkMode={darkMode}
+                editorFont={settings.editorFont || 'sans'}
               />
             </div>
           </div>
-        )}
+        </div>
+      )}
 
         {currentPage === 'dashboard' && (
           <DashboardView
@@ -839,6 +977,10 @@ export default function App() {
             }}
             onCreateNote={handleCreateNote}
             darkMode={darkMode}
+            compact={settings.compact}
+            defaultView={settings.defaultView}
+            defaultSort={settings.defaultSort}
+            customSubjects={customSubjects}
           />
         )}
 
@@ -855,6 +997,7 @@ export default function App() {
             initialSubject={selectedSubjectForTopics}
             onClearInitialSubject={() => setSelectedSubjectForTopics(null)}
             darkMode={darkMode}
+            compact={settings.compact}
           />
         )}
 
@@ -867,6 +1010,9 @@ export default function App() {
             }}
             onToggleFavorite={handleToggleFavorite}
             darkMode={darkMode}
+            compact={settings.compact}
+            defaultView={settings.defaultView}
+            defaultSort={settings.defaultSort}
           />
         )}
 
@@ -879,6 +1025,9 @@ export default function App() {
             }}
             onToggleFavorite={handleToggleFavorite}
             darkMode={darkMode}
+            compact={settings.compact}
+            defaultView={settings.defaultView}
+            defaultSort={settings.defaultSort}
           />
         )}
 
@@ -887,10 +1036,12 @@ export default function App() {
             settings={settings}
             onUpdateSettings={(newSettings) => setSettings((s) => ({ ...s, ...newSettings }))}
             notes={notes}
-            onImportNotes={(imported) => {
-              setNotes(imported);
-              if (imported[0]) setActiveNoteId(imported[0].id);
-            }}
+            allSubjects={allSubjects}
+            customSubjects={customSubjects}
+            onDeleteCustomSubject={handleDeleteCustomSubject}
+            onImportNotes={handleImportNotes}
+            onResetSettings={handleResetSettings}
+            onResetDemoNotes={handleResetDemoNotes}
             onDeleteAllNotes={() => {
               setConfirmModal({
                 isOpen: true,

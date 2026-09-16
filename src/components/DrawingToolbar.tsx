@@ -376,19 +376,15 @@ export const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
       {/* Divider */}
       <div className="w-px h-5 bg-gray-200 dark:bg-zinc-700 mx-1" />
 
-      {/* ✓ Done drawing */}
+      {/* ✓ Done drawing / done writing */}
       <button
         id="draw-done-btn"
         type="button"
         onClick={onDone}
-        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors shadow-2xs ${
-          darkMode
-            ? 'border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700'
-            : 'border-[#D0D5DD] bg-white text-gray-700 hover:bg-gray-50'
-        }`}
+        className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border text-sm font-semibold transition-all shadow-xs bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white border-emerald-600 dark:bg-emerald-600 dark:hover:bg-emerald-500 dark:border-emerald-500 cursor-pointer"
         title="Finish drawing"
       >
-        <Check className="w-4 h-4 text-gray-700 dark:text-zinc-300" />
+        <Check className="w-4 h-4 text-white stroke-[2.5]" />
         <span>Done drawing</span>
       </button>
     </div>
