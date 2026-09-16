@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Home,
   LayoutGrid,
@@ -10,9 +10,11 @@ import {
   Sun,
   ChevronsLeft,
   ChevronsRight,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { NavPage } from '../types';
 import { PWAInstallButton } from './PWAInstallButton';
+import { BrandingSettings, loadBrandingSettings, BrandingSettingsData } from './BrandingSettings';
 
 interface SidebarProps {
   currentPage: NavPage;
@@ -33,6 +35,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onToggleDarkMode,
   compact = false,
 }) => {
+  const [branding, setBranding] = useState<BrandingSettingsData>(loadBrandingSettings);
+  const [showBrandingSettings, setShowBrandingSettings] = useState(false);
+
+  useEffect(() => {
+    const refreshBranding = () => setBranding(loadBrandingSettings());
+    window.addEventListener('ns-branding-updated', refreshBranding);
+    return () => window.removeEventListener('ns-branding-updated', refreshBranding);
+  }, []);
+
   const navItems = [
     { id: 'dashboard' as NavPage, label: 'Dashboard', icon: Home },
     { id: 'subjects' as NavPage, label: 'Subjects', icon: LayoutGrid },
@@ -41,6 +52,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'favorites' as NavPage, label: 'Favorites', icon: Star },
     { id: 'settings' as NavPage, label: 'Settings', icon: Settings },
   ];
+
+  const logo = branding.dataUrl;
+  const logoSize = branding.size;
+
+  const brandText = branding.showName ? (
+    <span className="text-[21px] font-bold tracking-tight whitespace-nowrap">
+      <span className={darkMode ? 'text-white' : 'text-gray-900'}>Note</span>
+      <span className="text-[#7F56D9]">Storage</span>
+    </span>
+  ) : null;
+
+  const customBrand = logo ? (
+    <div className="flex items-center gap-2 min-w-0">
+      {branding.position === 'left' && (
+        <img src={logo} alt="Custom NoteStorage logo" style={{ width: logoSize, height: logoSize }} className="object-contain shrink-0" />
+      )}
+      {branding.position === 'replace' ? (
+        <img src={logo} alt="Custom NoteStorage logo" style={{ width: logoSize, height: logoSize }} className="object-contain shrink-0" />
+      ) : brandText}
+      {branding.position === 'right' && (
+        <img src={logo} alt="Custom NoteStorage logo" style={{ width: logoSize, height: logoSize }} className="object-contain shrink-0" />
+      )}
+    </div>
+  ) : brandText;
 
   return (
     <aside
@@ -53,20 +88,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Brand Header */}
       <div className={`flex items-center justify-between ${compact ? 'mb-4' : 'mb-7'} px-1.5`}>
         {!collapsed ? (
-          <div className="flex items-center">
-            <span
-              className={`text-[21px] font-bold tracking-tight ${
-                darkMode ? 'text-white' : 'text-gray-900'
-              }`}
-            >
-              Note
-            </span>
-            <span className="text-[21px] font-bold tracking-tight text-[#7F56D9]">
-              Storage
-            </span>
-          </div>
+          branding.dataUrl ? customBrand : (
+            <div className="flex items-center">
+              <span
+                className={`text-[21px] font-bold tracking-tight ${
+                  darkMode ? 'text-white' : 'text-gray-900'
+                }`}
+              >
+                Note
+              </span>
+              <span className="text-[21px] font-bold tracking-tight text-[#7F56D9]">
+                Storage
+              </span>
+            </div>
+          )
         ) : (
-          <div className="mx-auto text-[20px] font-bold text-[#7F56D9]">NS</div>
+          branding.dataUrl ? (
+            <img src={branding.dataUrl} alt="Custom NoteStorage logo" style={{ width: Math.min(branding.size, 40), height: Math.min(branding.size, 40) }} className="mx-auto object-contain" />
+          ) : (
+            <div className="mx-auto text-[20px] font-bold text-[#7F56D9]">NS</div>
+          )
         )}
 
         <button
@@ -125,6 +166,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
           );
         })}
+
+        {/* Branding is available from Settings, matching the existing settings-sidebar pattern. */}
+        {currentPage === 'settings' && (
+          <button
+            id="nav-item-branding"
+            onClick={() => setShowBrandingSettings(true)}
+            className={`flex items-center gap-3 px-3 ${compact ? 'py-1.5' : 'py-2'} rounded-xl text-sm font-medium transition-all ${
+              darkMode
+                ? 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200'
+                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+            } ${collapsed ? 'justify-center px-2' : ''}`}
+            title="Logo & Branding"
+          >
+            <ImageIcon className="w-[19px] h-[19px] flex-shrink-0 text-[#7F56D9]" strokeWidth={1.75} />
+            {!collapsed && <span>Logo & Branding</span>}
+          </button>
+        )}
       </nav>
 
       {/* Bottom Actions */}
@@ -153,6 +211,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {!collapsed && <span>{darkMode ? 'Light mode' : 'Dark mode'}</span>}
         </button>
       </div>
+
+      {showBrandingSettings && (
+        <BrandingSettings
+          darkMode={darkMode}
+          onClose={() => {
+            setBranding(loadBrandingSettings());
+            setShowBrandingSettings(false);
+          }}
+        />
+      )}
     </aside>
   );
 };
