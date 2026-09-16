@@ -61,7 +61,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       } ${collapsed ? 'w-[70px] px-2' : 'w-[230px] px-3.5'} ${compact ? 'py-3' : 'py-5'} flex-shrink-0 min-h-screen`}
     >
       {/* Brand Header */}
-      <div className={`relative flex items-center justify-center ${compact ? 'mb-4' : 'mb-7'} min-h-[${collapsed ? '40px' : '64px'}]`}>
+      <div className={`relative flex items-center justify-center ${compact ? 'mb-4 min-h-[40px]' : 'mb-7 min-h-[64px]'}`}>
         {branding.dataUrl ? (
           <img
             src={branding.dataUrl}
@@ -87,7 +87,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             darkMode
               ? 'border-zinc-700 text-zinc-400 hover:bg-zinc-800'
               : 'border-gray-200 text-gray-400 hover:text-gray-600 hover:bg-gray-50'
-          } ${collapsed ? 'right-0' : ''}`}
+          }`}
         >
           {collapsed ? (
             <ChevronsRight className="w-4 h-4" />
@@ -137,7 +137,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         })}
       </nav>
 
-      {/* Logo & Branding is intentionally available only inside Settings. */}
+      {/* Logo & Branding is available only while Settings is open. */}
       {currentPage === 'settings' && !collapsed && (
         <button
           id="settings-branding-option"
