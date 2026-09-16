@@ -20,6 +20,17 @@
   color: #ffffff;
 }
 
+/* Hide low-use note actions from the main formatting toolbar. */
+#format-checklist-btn,
+#format-image-btn {
+  display: none !important;
+}
+
+/* Remove the redundant active-note summary from the Subjects & Topics sidebar. */
+#subject-topic-sidebar > div:last-child {
+  display: none !important;
+}
+
 /* Sleek custom scrollbars */
 ::-webkit-scrollbar {
   width: 8px;
