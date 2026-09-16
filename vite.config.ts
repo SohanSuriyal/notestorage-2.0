@@ -85,6 +85,7 @@ export default defineConfig(() => {
         },
       }),
     ],
+    base: '/notestorage-2.0/',
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
