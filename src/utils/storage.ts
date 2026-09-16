@@ -5,7 +5,6 @@ const DB_VERSION = 2;
 const NOTES_STORE = 'notes';
 const ATTACHMENTS_STORE = 'attachments';
 
-// Avoid rewriting unchanged notes when React state changes frequently.
 const lastSavedUpdated = new Map<string, number>();
 
 function openDb(): Promise<IDBDatabase> {
@@ -14,13 +13,44 @@ function openDb(): Promise<IDBDatabase> {
 
     request.onupgradeneeded = () => {
       const db = request.result;
+      const tx = request.transaction;
 
       if (!db.objectStoreNames.contains(NOTES_STORE)) {
         db.createObjectStore(NOTES_STORE, { keyPath: 'id' });
       }
 
+      let attachmentsStore: IDBObjectStore;
       if (!db.objectStoreNames.contains(ATTACHMENTS_STORE)) {
-        db.createObjectStore(ATTACHMENTS_STORE, { keyPath: 'noteId' });
+        attachmentsStore = db.createObjectStore(ATTACHMENTS_STORE, { keyPath: 'noteId' });
+      } else {
+        attachmentsStore = tx!.objectStore(ATTACHMENTS_STORE);
+      }
+
+      // Migrate old v1 notes: move heavy PDF/image payloads out of the note record.
+      if (tx && db.objectStoreNames.contains(NOTES_STORE)) {
+        const notesStore = tx.objectStore(NOTES_STORE);
+        notesStore.openCursor().onsuccess = (event) => {
+          const cursor = (event.target as IDBRequest).result as IDBCursorWithValue | null;
+          if (!cursor) return;
+
+          const oldNote = cursor.value as NoteItem;
+          const hasPdf = Boolean(oldNote.pdfData);
+          const hasFile = Boolean(oldNote.fileDataUrl);
+
+          if (hasPdf || hasFile) {
+            const attachment = {
+              noteId: oldNote.id,
+              ...(hasPdf ? { pdfData: oldNote.pdfData } : {}),
+              ...(hasFile ? { fileDataUrl: oldNote.fileDataUrl } : {}),
+            };
+
+            const { pdfData: _pdfData, fileDataUrl: _fileDataUrl, ...metadata } = oldNote;
+            attachmentsStore.put(attachment);
+            cursor.update(metadata);
+          }
+
+          cursor.continue();
+        };
       }
     };
 
@@ -37,44 +67,49 @@ type StoredAttachment = {
   fileDataUrl?: string;
 };
 
-function splitNote(note: NoteItem): { metadata: StoredNote; attachment: StoredAttachment | null } {
+function hasOwn(obj: object, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(obj, key);
+}
+
+function splitNote(note: NoteItem): { metadata: StoredNote; attachment: StoredAttachment | null; attachmentExplicitlyChanged: boolean } {
+  const pdfFieldPresent = hasOwn(note, 'pdfData');
+  const fileFieldPresent = hasOwn(note, 'fileDataUrl');
   const { pdfData, fileDataUrl, ...metadata } = note;
 
   const hasAttachment = Boolean(pdfData || fileDataUrl);
+  const attachmentExplicitlyChanged = pdfFieldPresent || fileFieldPresent;
 
   return {
     metadata,
     attachment: hasAttachment
-      ? {
-          noteId: note.id,
-          pdfData,
-          fileDataUrl,
-        }
+      ? { noteId: note.id, pdfData, fileDataUrl }
       : null,
+    attachmentExplicitlyChanged,
   };
 }
 
 function saveToLocalFallback(notes: NoteItem[]) {
   try {
-    // Keep only lightweight metadata in localStorage. Large PDF/image data stays out.
     const lightweight = notes.map((note) => splitNote(note).metadata);
     localStorage.setItem('ns_notes_meta', JSON.stringify(lightweight));
   } catch {
-    // Browser storage may be full. IndexedDB remains the primary store.
+    // IndexedDB remains the primary store.
   }
 }
 
 export async function saveNoteToStorage(note: NoteItem): Promise<void> {
   try {
     const db = await openDb();
-    const { metadata, attachment } = splitNote(note);
+    const { metadata, attachment, attachmentExplicitlyChanged } = splitNote(note);
     const tx = db.transaction([NOTES_STORE, ATTACHMENTS_STORE], 'readwrite');
 
     tx.objectStore(NOTES_STORE).put(metadata);
 
     if (attachment) {
       tx.objectStore(ATTACHMENTS_STORE).put(attachment);
-    } else {
+    } else if (attachmentExplicitlyChanged) {
+      // Only delete an attachment when the note explicitly changed the attachment field.
+      // Metadata-only loads must not accidentally delete lazily stored PDFs/images.
       tx.objectStore(ATTACHMENTS_STORE).delete(note.id);
     }
 
@@ -87,8 +122,6 @@ export async function saveNoteToStorage(note: NoteItem): Promise<void> {
     lastSavedUpdated.set(note.id, note.updated);
   } catch (err) {
     console.warn('IndexedDB note write failed:', err);
-
-    // Fallback contains metadata only to avoid duplicating large attachments.
     try {
       const saved = localStorage.getItem('ns_notes_meta');
       const existing: StoredNote[] = saved ? JSON.parse(saved) : [];
@@ -151,10 +184,7 @@ export async function loadNoteFromStorage(noteId: string): Promise<NoteItem | nu
   }
 }
 
-/**
- * Loads only lightweight note records. Attachments are deliberately excluded.
- * Use loadNoteFromStorage(id) when the user actually opens a note.
- */
+/** Loads lightweight note records only. Heavy attachments are not loaded here. */
 export async function loadNotesFromStorage(): Promise<NoteItem[] | null> {
   try {
     const db = await openDb();
@@ -167,9 +197,7 @@ export async function loadNotesFromStorage(): Promise<NoteItem[] | null> {
       req.onerror = () => reject(req.error);
     });
 
-    if (notes.length > 0) {
-      return notes as NoteItem[];
-    }
+    if (notes.length > 0) return notes as NoteItem[];
   } catch (err) {
     console.warn('IndexedDB metadata read failed, checking localStorage:', err);
   }
@@ -178,9 +206,7 @@ export async function loadNotesFromStorage(): Promise<NoteItem[] | null> {
     const saved = localStorage.getItem('ns_notes_meta');
     if (saved) {
       const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed as NoteItem[];
-      }
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed as NoteItem[];
     }
   } catch {
     // Ignore malformed or unavailable fallback data.
@@ -189,26 +215,20 @@ export async function loadNotesFromStorage(): Promise<NoteItem[] | null> {
   return null;
 }
 
-/**
- * Compatibility helper used by the current React app.
- * It now performs incremental upserts instead of clearing and rewriting the database.
- */
+/** Incremental compatibility save. It no longer clears and rewrites the entire database. */
 export async function saveNotesToStorage(notes: NoteItem[]): Promise<void> {
   saveToLocalFallback(notes);
 
   const changedNotes = notes.filter(
     (note) => lastSavedUpdated.get(note.id) !== note.updated
   );
-
-  // If this is the first save after an app restart, persist every note.
   const notesToSave = lastSavedUpdated.size === 0 ? notes : changedNotes;
 
   await Promise.all(notesToSave.map((note) => saveNoteToStorage(note)));
 
-  // Remove records that no longer exist without clearing the whole database.
   try {
     const db = await openDb();
-    const tx = db.transaction(NOTES_STORE, 'readwrite');
+    const tx = db.transaction([NOTES_STORE, ATTACHMENTS_STORE], 'readwrite');
     const store = tx.objectStore(NOTES_STORE);
     const existingIds: string[] = await new Promise((resolve, reject) => {
       const req = store.getAllKeys();
