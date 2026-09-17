@@ -21,18 +21,18 @@ jobs:
       - name: Check for complete update bundle
         id: bundle
         run: |
-          if [ -f .github/update/n2000.b64 ] && [ -f .github/update/n2001.b64 ] && [ -f .github/update/n2002.b64 ] && [ -f .github/update/n2003.b64 ] && [ -f .github/update/n2004.b64 ] && [ -f .github/update/n2005.b64 ]; then
-            echo "ready=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-          fi
+          ready=true
+          for i in 00 01 02 03 04 05 06 07 08 09 10 11; do
+            if [ ! -f ".github/update/n10${i}.b64" ]; then ready=false; fi
+          done
+          echo "ready=$ready" >> "$GITHUB_OUTPUT"
 
       - name: Apply uploaded source bundle
         if: steps.bundle.outputs.ready == 'true'
         run: |
-          cat .github/update/n2000.b64 .github/update/n2001.b64 .github/update/n2002.b64 .github/update/n2003.b64 .github/update/n2004.b64 .github/update/n2005.b64 | base64 -d > /tmp/notestorage-update.tar.xz
+          cat .github/update/n1000.b64 .github/update/n1001.b64 .github/update/n1002.b64 .github/update/n1003.b64 .github/update/n1004.b64 .github/update/n1005.b64 .github/update/n1006.b64 .github/update/n1007.b64 .github/update/n1008.b64 .github/update/n1009.b64 .github/update/n1010.b64 .github/update/n1011.b64 | base64 -d > /tmp/notestorage-update.tar.xz
           tar -xJf /tmp/notestorage-update.tar.xz -C .
-          rm -f .github/update/n2000.b64 .github/update/n2001.b64 .github/update/n2002.b64 .github/update/n2003.b64 .github/update/n2004.b64 .github/update/n2005.b64
+          rm -f .github/update/n10*.b64
           rm -f .github/workflows/apply-uploaded-update.yml
 
       - name: Commit applied source
